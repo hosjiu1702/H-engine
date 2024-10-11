@@ -129,7 +129,10 @@ def collate_fn(data):
     
 
 class IPAdapter(torch.nn.Module):
-    """IP-Adapter"""
+    """ A whole model which includes:
+            - Denoising U-net
+            - Image Projection (IP-Adapter)
+     """
     def __init__(self, unet, image_proj_model, adapter_modules, ckpt_path=None):
         super().__init__()
         self.unet = unet
@@ -333,7 +336,7 @@ def main():
         if args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
         tracker_config = vars(copy.deepcopy(args))
-        accelerator.init_trackers('vto-ipadapter-resampler-clip-finetune', config=tracker_config)
+        accelerator.init_trackers('Full finetuning U-net + IP-Adapter for inpaint', config=tracker_config)
 
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
@@ -343,16 +346,16 @@ def main():
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet")
     # image_encoder = AutoModel.from_pretrained(args.image_encoder_path) # DINO v2
     # image_encoder = DINOImageEncoder(args.image_encoder_path)
-    image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path, subfolder='models/image_encoder')
+    image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path, subfolder='models/image_encoder') # use CLIPVision for IP-Adapter
 
     # freeze parameters of models to save more memory
-    unet.requires_grad_(False)
-    vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
-    image_encoder.requires_grad_(False)
+    # unet.requires_grad_(False)
+    vae.requires_grad_(False) # Disable VAE
+    text_encoder.requires_grad_(False) # Disable CLIP Text embedder
+    image_encoder.requires_grad_(False) # Disable CLIP Vision embedder
     # image_encoder.dinov2.requires_grad_(False)
     
-    # projection layer
+    # projection layer (in IP-Adapter)
     image_proj_model = Resampler(
         dim=unet.config.cross_attention_dim,
         depth=4,
@@ -382,13 +385,15 @@ def main():
             block_id = int(name[len("down_blocks.")])
             hidden_size = unet.config.block_out_channels[block_id]
         if cross_attention_dim is None:
-            attn_procs[name] = AttnProcessor()
+            attn_procs[name] = AttnProcessor() # no need to update k,v from self-attention layer
         else:
             layer_name = name.split(".processor")[0]
+            # just naming for matrices of decoupled cross attention from IP-Adapter
             weights = {
                 "to_k_ip.weight": unet_sd[layer_name + ".to_k.weight"],
                 "to_v_ip.weight": unet_sd[layer_name + ".to_v.weight"],
             }
+            # update cross attention operation from corresponding layer
             attn_procs[name] = IPAttnProcessor(hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, num_tokens=args.num_tokens)
             attn_procs[name].load_state_dict(weights)
     unet.set_attn_processor(attn_procs)
