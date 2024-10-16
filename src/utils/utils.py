@@ -1,0 +1,27 @@
+# Copied from https://github.com/miccunifi/ladi-vton/blob/master/src/utils/set_seeds.py
+
+import random
+import os
+import numpy as np
+import torch
+import accelerate
+
+
+def set_seed(seed: int):
+    """
+    Set seed for reproducibility.
+    """
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    accelerate.utils.set_seed(seed)
+
+
+def set_train(module: torch.nn.Module, is_train: bool = True):
+    if is_train:
+        module.requires_grad_(True)
+    module.requires_grad_(False)
+        
