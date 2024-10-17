@@ -4,6 +4,7 @@
 # - https://github.com/yisol/IDM-VTON/blob/1b39608bf3b6f075b21562e86302dcefd6989fc5/train_xl.py
 
 import itertools
+import math
 import torch
 from diffusers import (
     DDPMScheduler,
@@ -12,6 +13,7 @@ from diffusers import (
 )
 from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration
 from src.utils.utils import set_seed, set_train
 from src.models.ip_adapter.attention_processor import (
@@ -19,6 +21,9 @@ from src.models.ip_adapter.attention_processor import (
     IPAttnProcessor2_0 as IPAttnProcessor
 )
 from src.models.ip_adapter.resampler import Resampler
+
+
+logger = get_logger(__name__, log_level="INFO")
 
 
 def main():
@@ -134,20 +139,70 @@ def main():
         eps=args.adam_epsilon,
         weight_decay=args.adam_weight_decay,
     )
-
     
+    # Update later
+    train_dataloader = None
+    test_dataloader = None
 
+    # For mixed precision training
+    weight_dtype = torch.float32
+    if accelerator.mixed_precision == 'fp16':
+        weight_dtype = torch.float16
+    elif accelerator.mixed_precision == 'bf16':
+        weight_dtype = torch.bfloat16
 
+    # cast all non-trainable weights to half-precision
+    # as these weights are only used for inference, keeping weights in full precision is not required
+    device = accelerator.device
+    vae.to(device, dtype=weight_dtype)
+    text_encoder.to(device, dtype=weight_dtype)
+    image_encoder.to(device, dtype=weight_dtype)
 
+    # hey Huggingface team, why do you want to need to override this poor variable (overrode...)
+    overrode_max_train_steps = False
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumlation_steps)
+    if args.max_train_steps is None:
+        args.max_train_steps = num_update_steps_per_epoch * args.num_train_epochs
+        overrode_max_train_steps = True
 
+    # Set up everything for:
+    # * Distributed training
+    # * Data Parallelism
+    # * Device Placement
+    # * Gradient Synchronization
+    # * what else?
+    unet, image_proj_model, image_encoder, optimizer, train_dataloader = accelerator.prepare(
+        unet,
+        image_proj_model,
+        image_encoder,
+        optimizer,
+        train_dataloader,
+    )
 
+    # We need to recalculate our total training steps as the size of the training dataloader may have changed.
+    # (actually I don't know why this could happen :|)
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    if overrode_max_train_steps:
+        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+    # Afterwards we recalculate our number of training epochs
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
+    # Initialize tracker, store the configuration
+    if accelerator.is_main_process:
+        tracker_config = dict(vars(args))
+        accelerator.init_trackers(args.tracker_project_name, tracker_config)
 
+    total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+    logger.info("********* Running Training *********")
+    logger.info(f"  Num examples = {len(train_dataset)}")
+    logger.info(f"  Num epochs = {args.num_train_epochs}")
+    logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
+    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(f"  Gradient accumulation steps = {args.gradient_accumulation_steps}")
+    logger.info(f"  Total optimization steps = {args.max_train_steps}")
 
-
-
-
-
+    progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
+    progress_bar = set_description('Steps')
     
 
 
