@@ -5,9 +5,20 @@
 
 import itertools
 import torch
+from diffusers import (
+    DDPMScheduler,
+    AutoencoderKL,
+    UNet2DConditionModel
+)
+from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
 from src.utils.utils import set_seed, set_train
+from src.models.ip_adapter.attention_processor import (
+    AttnProcessor2_0 as AttnProcessor,
+    IPAttnProcessor2_0 as IPAttnProcessor
+)
+from src.models.ip_adaper.resampler import Resampler
 
 
 def main():
@@ -16,7 +27,7 @@ def main():
     # Init Acclerator object for tracking training process
     project_config = ProjectConfiguration(args.project_dir, args.logging_dir)
     accelerator = Accelerator(
-                log_with=report_to,
+                log_with=args.report_to,
                 project_config=project_config
             )
 
