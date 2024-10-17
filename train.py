@@ -3,10 +3,11 @@
 # https://github.com/tencent-ailab/IP-Adapter/blob/main/ip_adapter/attention_processor.py
 # https://github.com/yisol/IDM-VTON/blob/1b39608bf3b6f075b21562e86302dcefd6989fc5/train_xl.py
 
-from src.utils.utils import set_seed, set_train
+import itertools
 import torch
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
+from src.utils.utils import set_seed, set_train
 
 
 def main():
@@ -109,11 +110,21 @@ def main():
     set_train(unet, True)
     set_train(image_proj_model, True)
 
+    # Enable TF32 for faster training on Ampere GPUs (and later)
+    if args.allow_tf32:
+        torch.backends.cuda.matmul.allow_tf32 = True
 
+    # Define optimizer
+    params_to_opt = itertools.chain(unet.parameters(), image_proj_model.parameters())
+    optimizer = torch.optim.AdamW(
+        params_to_opt,
+        lr=args.lr,
+        betas=(args.adam_beta1, args.adam_beta2),
+        eps=args.adam_epsilon,
+        weight_decay=args.adam_weight_decay,
+    )
 
-
-
-
+    
 
 
 
