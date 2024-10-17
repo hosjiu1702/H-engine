@@ -1,7 +1,7 @@
 # Modified from:
-# https://github.com/miccunifi/ladi-vton/blob/master/src/train_vto.py
-# https://github.com/tencent-ailab/IP-Adapter/blob/main/ip_adapter/attention_processor.py
-# https://github.com/yisol/IDM-VTON/blob/1b39608bf3b6f075b21562e86302dcefd6989fc5/train_xl.py
+# - https://github.com/miccunifi/ladi-vton/blob/master/src/train_vto.py
+# - https://github.com/tencent-ailab/IP-Adapter/blob/main/ip_adapter/attention_processor.py
+# - https://github.com/yisol/IDM-VTON/blob/1b39608bf3b6f075b21562e86302dcefd6989fc5/train_xl.py
 
 import itertools
 import torch
