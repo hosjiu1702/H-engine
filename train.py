@@ -18,7 +18,7 @@ from src.models.ip_adapter.attention_processor import (
     AttnProcessor2_0 as AttnProcessor,
     IPAttnProcessor2_0 as IPAttnProcessor
 )
-from src.models.ip_adaper.resampler import Resampler
+from src.models.ip_adapter.resampler import Resampler
 
 
 def main():
