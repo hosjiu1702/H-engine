@@ -6,12 +6,13 @@
 import itertools
 import math
 import torch
+import torch.nn.functional as F
 from diffusers import (
     DDPMScheduler,
     AutoencoderKL,
     UNet2DConditionModel
 )
-from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
+from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection, CLIPImageProcessor
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration
@@ -101,9 +102,18 @@ def main():
         output_dim=unet.config.cross_attention_dim,
     )
     image_proj_model.load_state_dict(ip_state_dict['image_proj'], strict=True) # Load pretrained weights from pretrained IP-Adpater model
+    
+    # Init image projection layer from outside of the denoising unet
+    # for a better control because we could avoid directly modify the code inside of unet2dcondition.
+    # But this will make this training code hard to read and refractor with new training strategy.
+    unet.encoder_hid_proj = image_proj_model
+    unet.config.update({'encoder_hidden_dim_type': 'ip_image_proj'})
 
     # Update the first convolution layer to works with additional inputs
-    new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image)
+    if args.use_densepose:
+        new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image)
+    else:
+        new_in_channels = 9
     with torch.no_grad():
         conv_new = torch.nn.Conv2d(
             in_channels=new_in_channels,
@@ -203,7 +213,65 @@ def main():
 
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar = set_description('Steps')
-    
+
+    for epoch in range(0, args.num_train_epochs):
+        train_loss = 0.
+        for step, batch in enumerate(train_dataloader):
+            with accelerate.accumulate(unet), accelerate.accumulate(image_proj_model):
+                # Get inputs for denoising unet (Pixel Space --> Latent Space)
+                latents = vae.encode(batch['image'].to(dtype=weight_dtype)).latent_dist.sample()
+                latents = latents * vae.config.scaling_factor
+                masked_images = vae.encode(batch['masked_image'].to(dtype=weight_dtype)).latent_dist.sample()
+                masked_images = masked_images * vae.config.scaling_factor
+                masks = batch['mask'].to(dtype=weight_dtype)
+                masks = F.interpolate(masks, size=(args.height//8, args.weight//8))
+                
+                # Get text condition
+                text_prompts = ['']*len(batch['captions']) # we set input text prompts as a list of empty strings
+                text_ids = tokenizer(
+                    text_prompts,
+                    max_length=tokenizer.model_max_length,
+                    padding='max_length',
+                    truncation=True,
+                    return_tensors='pt',
+                ).input_ids
+                encoder_hidden_states = text_encoder(text_ids.to(device)).last_hidden_state # use last feature layer from CLIP Text Encoder
+                    
+                image_embeds = image_encoder(batch['clip_image'].to(device, dtype=weight_dtype))
+                ip_image_embeds = image_proj_model(image_embeds)
+                added_cond_kwargs = {'image_embeds': ip_image_embeds}
+
+                latents.to(device, dtype=weight_dtype)
+                masked_images.to(device, dtype=weight_dtype)
+                masks.to(device, dtype=weight_dtype)
+
+                # add Gaussian noise to input for each timestep
+                # this is diffusion forward pass
+                noise = torch.randn_like(latents).to(device, dtype=weight_dtype)
+                bs = latents.shape[0]
+                timesteps = torch.randint(0, noise_scheduler.num_train_steps, (bs,))
+                timesteps = timesteps.long()
+                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+
+                unet_input = torch.cat([noisy_latents, masks, masked_images], dim=1) # concatenate in channel dim
+
+                # Denoising or diffusion backward process
+                noise_pred = unet(unet_input, timesteps, encoder_hidden_states, added_cond_kwargs=added_cond_kwargs).sample
+
+                
+ 
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
