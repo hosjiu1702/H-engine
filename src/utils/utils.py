@@ -25,3 +25,6 @@ def set_train(module: torch.nn.Module, is_train: bool = True):
         module.requires_grad_(True)
     module.requires_grad_(False)
         
+
+def use_gradient_accumulation(val: int) -> bool:
+    return True if val > 1 else False
