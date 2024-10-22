@@ -4,6 +4,7 @@
 # - https://github.com/yisol/IDM-VTON/blob/1b39608bf3b6f075b21562e86302dcefd6989fc5/train_xl.py
 # - https://github.com/lyc0929/OOTDiffusion-train/blob/main/run/ootd_train.py
 # - https://github.com/luxiaolili/IDM-VTON-train/blob/main/train.py
+# - https://github.dev/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image.py
 
 import itertools
 import math
@@ -42,7 +43,7 @@ def main():
     project_config = ProjectConfiguration(
         project_dir=args.output_dir,
         logging_dir=logging_dir,
-        total_limit=args.total_limit_states,
+        total_limit=args.total_limit_states, # this argument should control the number of saved model's state dict
     )
     accelerator = Accelerator(
                 mixed_precision=args.mixed_precision,
@@ -62,9 +63,6 @@ def main():
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder='vae', torch_dtype=torch.float16) # float16 vs float32 -> which one to choose?
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path)
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet')
-
-    # Load IP-Adapter pretrained weights
-    state_dict = torch.load(args.pretrained_ip_adapter_path, map_location='cpu')
 
     # Load IP-Adapter for joint training with Denoising U-net.
     # We load the existing adapter modules from the original U-net
@@ -118,7 +116,7 @@ def main():
     image_proj_model.load_state_dict(ip_state_dict['image_proj'], strict=True) # Load pretrained weights from pretrained IP-Adpater model
     
     # Init image projection layer from outside of the denoising unet
-    # for a better control because we could avoid directly modify the code inside of unet2dcondition.
+    # for a better control because we could avoid directly modify the code inside of unet_2d_condition.py
     # But this will make this training code hard to read and refractor with new training strategy.
     unet.encoder_hid_proj = image_proj_model
     unet.config.update({'encoder_hidden_dim_type': 'ip_image_proj'})
@@ -225,8 +223,11 @@ def main():
     logger.info(f"  Gradient accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
 
-    progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
-    progress_bar.set_description('Steps')
+    progress_bar = tqdm(
+        range(0, args.max_train_steps),
+        desc='Steps',
+        disable=not accelerator.is_local_main_process, # Only show the progress bar once on each machine.
+    )
 
     global_steps = 0
     for epoch in range(0, args.num_train_epochs):
@@ -276,7 +277,7 @@ def main():
                 # all processes (in distributed training if any) manually
                 # I'am not sure but IMO they probably use DDP (Distributed Data Parallel)
                 # behind the scene so feel free check it out if you want to learn more on this concept
-                avg_loss = accelerator.gather(loss.repeat(args.train_batch_size))
+                avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean() # this line from Huggingface Accelerate is suck :)
                 if not use_gradient_accumulation(args.gradient_accumlation_steps):
                     train_loss += avg_loss.item()
                 else:
@@ -293,7 +294,7 @@ def main():
                 if accelerator.sync_gradients:
                     global_steps += 1
                     progress_bar.update(1)
-                    accelerator.log({'train_loss': train_loss}, step=global_steps)
+                    accelerator.log({'train_loss': train_loss}, step=global_steps) # log to predefined tracker, for example, wandb
                     train_loss = 0.
                     # Saves model at a certain training step
                     if global_steps % args.checkpointing_steps == 0:
@@ -304,6 +305,9 @@ def main():
                             accelerator.save_state(save_path, safe_serialization=False)
                             logger.info(f'Saved state to {save_path}')
                             # Save (unet + ip-adapter)
+                            # CAUTION: this code snippet below potentially cause
+                            # your hard disk overflow and the training machine crash
+                            # if it is not handled properly!
                             unwrapped_unet = accelerator.unwrap_model(unet)
                             unwrapped_ipadapter = accelerator.unwrap_model(image_proj_model)
                             unet_path = os.path.join(args.output_dir, f'unet-{global_steps}.pth')
@@ -312,26 +316,15 @@ def main():
                             accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
                             del unwrapped_unet
                             del unwrapped_ipadapter
+                logs = {'step_loss': loss.detach().item()}
+                progress_bar.set_postfix(**logs)
  
                 if global_steps >= args.max_train_steps:
                     break
 
+    accelerator.end_training()
+    logger.info('======== Training End ========')
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+if __name__ == '__main__':
+    main()
