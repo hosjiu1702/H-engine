@@ -5,6 +5,8 @@
 
 import itertools
 import math
+import os
+
 import torch
 import torch.nn.functional as F
 from diffusers import (
@@ -16,7 +18,9 @@ from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjec
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration
-from src.utils.utils import set_seed, set_train
+import tqdm
+
+from src.utils.utils import set_seed, set_train, use_gradient_accumulation
 from src.models.ip_adapter.attention_processor import (
     AttnProcessor2_0 as AttnProcessor,
     IPAttnProcessor2_0 as IPAttnProcessor
@@ -29,11 +33,19 @@ logger = get_logger(__name__, log_level="INFO")
 
 def main():
     args = None # update later
-    
+
+    logging_dir = os.path.join(args.output_dir, args.logging_dir)
+
     # Init Acclerator object for tracking training process
-    project_config = ProjectConfiguration(args.project_dir, args.logging_dir)
+    project_config = ProjectConfiguration(
+        project_dir=args.output_dir,
+        logging_dir=logging_dir,
+        total_limit=args.total_limit_states,
+    )
     accelerator = Accelerator(
+                mixed_precision=args.mixed_precision,
                 log_with=args.report_to,
+                gradient_accumlation_steps=args.gradient_accumulation_steps,
                 project_config=project_config
             )
 
@@ -212,12 +224,13 @@ def main():
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
 
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
-    progress_bar = set_description('Steps')
+    progress_bar.set_description('Steps')
 
+    global_steps = 0
     for epoch in range(0, args.num_train_epochs):
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
-            with accelerate.accumulate(unet), accelerate.accumulate(image_proj_model):
+            with accelerator.accumulate(unet), accelerator.accumulate(image_proj_model):
                 # Get inputs for denoising unet (Pixel Space --> Latent Space)
                 latents = vae.encode(batch['image'].to(dtype=weight_dtype)).latent_dist.sample()
                 latents = latents * vae.config.scaling_factor
@@ -245,7 +258,7 @@ def main():
                 masked_images.to(device, dtype=weight_dtype)
                 masks.to(device, dtype=weight_dtype)
 
-                # add Gaussian noise to input for each timestep
+                # Add Gaussian noise to input for each timestep
                 # this is diffusion forward pass
                 noise = torch.randn_like(latents).to(device, dtype=weight_dtype)
                 bs = latents.shape[0]
@@ -254,13 +267,52 @@ def main():
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
                 unet_input = torch.cat([noisy_latents, masks, masked_images], dim=1) # concatenate in channel dim
+                noise_pred = unet(unet_input, timesteps, encoder_hidden_states, added_cond_kwargs=added_cond_kwargs).sample # Denoising or diffusion backward process
+                loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
 
-                # Denoising or diffusion backward process
-                noise_pred = unet(unet_input, timesteps, encoder_hidden_states, added_cond_kwargs=added_cond_kwargs).sample
-
+                # For logging purpose, you need to gather losses across
+                # all processes (in distributed training if any) manually
+                # I'am not sure but IMO they probably use DDP (Distributed Data Parallel)
+                # behind the scene so feel free check it out if you want to learn more on this concept
+                avg_loss = accelerator.gather(loss.repeat(args.train_batch_size))
+                if not use_gradient_accumulation(args.gradient_accumlation_steps):
+                    train_loss += avg_loss.item()
+                else:
+                    train_loss += avg_loss.item() / args.gradient_accumulation_steps
                 
- 
+                # Huggingface Accelerate seems do almost everything here
+                # so it obscures too much things under the hood making it
+                # very hard to understand how everything is going on
+                accelerator.backward(loss)
+                optimizer.step()
+                optimizer.zero_grad()
 
+                # Logging training loss after updating all network weights
+                if accelerator.sync_gradients:
+                    global_steps += 1
+                    progress_bar.update(1)
+                    accelerator.log({'train_loss': train_loss}, step=global_steps)
+                    train_loss = 0.
+                    # Saves model at a certain training step
+                    if global_steps % args.checkpointing_steps == 0:
+                        if accelerator.is_main_process:
+                            # Just for resuming when we want to continue training from the last state
+                            save_path = os.path.join(args.output_dir, 'checkpoints', f'ckpt-{global_steps}')
+                            os.makeddirs(save_path, exist_ok=True)
+                            accelerator.save_state(save_path, safe_serialization=False)
+                            logger.info(f'Saved state to {save_path}')
+                            # Save (unet + ip-adapter)
+                            unwrapped_unet = accelerator.unwrap_model(unet)
+                            unwrapped_ipadapter = accelerator.unwrap_model(image_proj_model)
+                            unet_path = os.path.join(args.output_dir, f'unet-{global_steps}.pth')
+                            ipadapter_path = os.path.join(args.output_dir, f'ipadapter-{global_steps}.pth')
+                            accelerator.save(unwrapped_unet, unet_path, safe_serialization=False)
+                            accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
+                            del unwrapped_unet
+                            del unwrapped_ipadapter
+ 
+                if global_steps >= args.max_train_steps:
+                    break
 
 
 
