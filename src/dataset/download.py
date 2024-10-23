@@ -11,7 +11,7 @@ from src.utils import get_project_root
 PROJECT_ROOT_PATH = get_project_root()
 
 
-def download_dataset(
+def _download_dataset(
     name: Text = 'vitonhd',
     save_path: Optional[Text] =  None,
 ):
@@ -26,9 +26,9 @@ def download_dataset(
         file_ext = '.zip'
         file_path = Path(save_path, file_name).with_suffix(file_ext)
 
-        if file_path.exists:
+        if file_path.exists or os.path.isfile(os.path.join(save_path, 'train_pairs.txt')):
             print(f'The {file_name} (zipped) dataset was downloaded before.')
-            return file_path
+            return None
 
         with open(file_path, 'wb') as f:
             # increase chunk size to could decrease download time
@@ -39,13 +39,22 @@ def download_dataset(
     return file_path
 
 
-def unzip(file_path: Text):
+def _unzip(file_path: Text):
     extract_dir = os.path.dirname(file_path)
     print('Be extracting ...')
     unpack_archive(file_path, extract_dir)
     print('Unzipped done.')
 
 
+def download(dataset_name: Text = 'vitonhd'):
+    zipfile = _download_dataset(dataset_name)
+    if zipfile is None:
+        print('Maybe, your dataset was downloaded and extracted. Check it out!')
+        return
+    else:
+        _unzip(zipfile)
+        os.remove(zipfile)
+
+
 if __name__ == '__main__':
-    dataset_path = download_dataset(name='vitonhd')
-    unzip(dataset_path)
+    download('vitonhd')
