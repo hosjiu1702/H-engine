@@ -12,6 +12,7 @@ import os
 
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from diffusers import (
     DDPMScheduler,
     AutoencoderKL,
@@ -29,6 +30,7 @@ from src.models.ip_adapter.attention_processor import (
     IPAttnProcessor2_0 as IPAttnProcessor
 )
 from src.models.ip_adapter.resampler import Resampler
+from src.dataset.vitonhd import VITONHDDataset
 
 
 logger = get_logger(__name__, log_level="INFO")
@@ -162,9 +164,23 @@ def main():
         weight_decay=args.adam_weight_decay,
     )
     
-    # Update later
-    train_dataloader = None
-    test_dataloader = None
+    # Load dataset for training
+    train_dataset = VITONHDDataset(
+        data_rootpath=args.data_dir,
+        use_trainset=True,
+        use_paired_data=True,
+        use_augmentation=False,
+        height=args.height,
+        width=args.width,
+        use_CLIPVision=True
+    )
+    train_dataloader = DataLoader(
+        dataset=train_dataset,
+        batch_size=args.train_batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=True,
+    )
 
     # For mixed precision training
     weight_dtype = torch.float32
