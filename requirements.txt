@@ -8,3 +8,4 @@ requests==2.32.3
 torchvision==0.17.2 -c pytorch
 ipykernel==6.29.5
 matplotlib==3.7.5
+wandb==0.8.15
