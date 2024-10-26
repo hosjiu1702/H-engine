@@ -9,6 +9,7 @@
 import itertools
 import math
 import os
+import argparse
 
 import torch
 import torch.nn.functional as F
@@ -18,7 +19,7 @@ from diffusers import (
     AutoencoderKL,
     UNet2DConditionModel
 )
-from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection, CLIPImageProcessor
+from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration
@@ -36,8 +37,158 @@ from src.dataset.vitonhd import VITONHDDataset
 logger = get_logger(__name__, log_level="INFO")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Training Script')
+    parser.add_argument(
+        '--pretrained_model_name_or_path',
+        type=str,
+        default=None,
+        required=True,
+        help='Path to pretrained model or model identifier from huggingface.co/models'
+    )
+    parser.add_argument(
+        '--output_dir',
+        type=str,
+        default='output',
+        help='The output directory where the checkpoints will be written.'
+    )
+    parser.add_argument(
+        '--data_dir',
+        type=str,
+        required=True,
+        help='Path to the dataset which is used to train model.'
+    )
+    parser.add_argument(
+        '--total_limit_states',
+        type=int,
+        default=5,
+        help='the maximum value which control the number of saved model state dict'
+    )
+    parser.add_argument(
+        '--report_to',
+        type=str,
+        default='wandb',
+        help=('The tracker is used to report the results and logs to. '
+              'Supported platforms are `"tensorboard"`, `"wandb"` (Default)'
+        )
+    )
+    parser.add_argument(
+        '--mixed_precision',
+        type=str,
+        default='fp16',
+        choices=['no', 'fp16', 'bf16'],
+        help='Whether to use mixed precision'
+    )
+    parser.add_argument(
+        '--gradient_accumulation_steps',
+        type=int,
+        default=1,
+        help='Number of update steps to accumulate before performing a backward pass.'
+    )
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=1996,
+        help='A seed for reproducible training'
+    )
+    parser.add_argument(
+        '--num_tokens',
+        type=int,
+        default=16,
+        help='Number of tokens which is used as input of the perceiver resampler of IP-Adapter'
+    )
+    parser.add_argument(
+        '--allow_tf32',
+        action='store_true',
+        help='Whether or not to allow TF32 on Ampere GPUs.'
+    )
+    parser.add_argument(
+        'lr',
+        type=float,
+        default=1e-5,
+        help='Initial learning rate (after the potential warmup period) to use.'
+    )
+    parser.add_argument(
+        '--adam_beta1',
+        type=float,
+        default=0.9,
+        help='The beta 1 parameter for the Adam optimizer.'
+    )
+    parser.add_argument(
+        '--adam_beta2',
+        type=float,
+        default=0.999,
+        help='The beta 2 parameter for the Adam optimizer.'
+    )
+    parser.add_argument(
+        '--adam_epsilon',
+        type=float,
+        default=1e-8,
+        help='Epsilon value for the Adam optimzer.'
+    )
+    parser.add_argument(
+        '--adam_weight_decay',
+        type=float,
+        default=1e-2,
+        help='Weight decay to use.'
+    )
+    parser.add_argument(
+        '--height',
+        type=int,
+        default=1024,
+        help='Height of the generated image.'
+    )
+    parser.add_argument(
+        '--width',
+        type=int,
+        default=768,
+        help='Width of the generated image.'
+    )
+    parser.add_argument(
+        '--train_batch_size',
+        type=int,
+        default=8,
+        help='Batch size (per device, in the distributed training) for the training dataloader.'
+    )
+    parser.add_argument(
+        '--num_workers',
+        type=int,
+        default=8,
+        help='Number of workers to use in the dataloader.'
+    )
+    parser.add_argument(
+        '--max_train_steps',
+        type=int,
+        default=10000,
+        help='Total number of training steps to perform. If provided, overrides num_train_epochs.'
+    )
+    parser.add_argument(
+        '--num_train_epochs',
+        type=int,
+        default=100,
+        help='Total number of traning epochs to perform.'
+    )
+    parser.add_argument(
+        '--checkpointing_steps',
+        type=int,
+        default=2500,
+        help=('Save a checkpoint of the training state every X updates. '
+              'These checkpoints are only suitable for resuming to continue training.'
+        )
+    )
+    parser.add_argument(
+        '--use_densepose',
+        action='store_true',
+        help='Whether or not use densepose alongside with (mask, agnostic image and original image)'
+    )
+
+    args = parser.parse_args()
+
+    return args
+
+
 def main():
-    args = None # update later
+    args = parse_args()
 
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
 
@@ -55,7 +206,7 @@ def main():
             )
 
     # For reproducibility
-    if args.set_seed:
+    if args.seed:
         set_seed(args.seed)
 
     # Load diffusion-related components
