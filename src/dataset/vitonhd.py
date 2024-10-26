@@ -70,6 +70,7 @@ class VITONHDDataset(Dataset):
         # Cloth
         c = Image.open(self.c_paths[index])
         c = self.image_processor(images=c, return_tensors='pt').pixel_values
+        c = c.squeeze(0)
         
         # Densepose
         dp = Image.open(self.dp_paths[index])
