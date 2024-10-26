@@ -42,15 +42,33 @@ def parse_args():
     parser.add_argument(
         '--pretrained_model_name_or_path',
         type=str,
-        default=None,
-        required=True,
+        default='stable-diffusion-v1-5/stable-diffusion-inpainting',
+        required=False,
         help='Path to pretrained model or model identifier from huggingface.co/models'
+    )
+    parser.add_argument(
+        '--pretrained_ip_adapter_path',
+        type=str,
+        default='checkpoints/ip-adapter-plus_sd15.bin',
+        required=False,
+        help='Path to the pretrained IP-Adapter.'
+    )
+    parser.add_argument(
+        '--image_encoder_path',
+        type=str,
+        default='laion/CLIP-ViT-H-14-laion2B-s32B-b79K',
+        required=False,
     )
     parser.add_argument(
         '--output_dir',
         type=str,
         default='output',
         help='The output directory where the checkpoints will be written.'
+    )
+    parser.add_argument(
+        '--logging_dir',
+        type=str,
+        default='logs'
     )
     parser.add_argument(
         '--data_dir',
@@ -75,7 +93,7 @@ def parse_args():
     parser.add_argument(
         '--mixed_precision',
         type=str,
-        default='fp16',
+        default=None,
         choices=['no', 'fp16', 'bf16'],
         help='Whether to use mixed precision'
     )
@@ -99,11 +117,11 @@ def parse_args():
     )
     parser.add_argument(
         '--allow_tf32',
-        action='store_true',
+        action='store_false',
         help='Whether or not to allow TF32 on Ampere GPUs.'
     )
     parser.add_argument(
-        'lr',
+        '--lr',
         type=float,
         default=1e-5,
         help='Initial learning rate (after the potential warmup period) to use.'
@@ -201,7 +219,7 @@ def main():
     accelerator = Accelerator(
                 mixed_precision=args.mixed_precision,
                 log_with=args.report_to,
-                gradient_accumlation_steps=args.gradient_accumulation_steps,
+                gradient_accumulation_steps=args.gradient_accumulation_steps,
                 project_config=project_config
             )
 
@@ -226,10 +244,10 @@ def main():
         cross_attention_dim = None if name.endswith('attn1.processor') else unet.config.cross_attention_dim
         if name.startswith('mid_block'):
             hidden_size = unet.config.block_out_channels[-1]
-        elif name.startswith('down_block'):
+        elif name.startswith('down_blocks'):
             block_id = int(name[len('down_blocks.')])
-            hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
-        elif name.startswith('up_block'):
+            hidden_size = unet.config.block_out_channels[block_id]
+        elif name.startswith('up_blocks'):
             block_id = int(name[len('up_blocks.')])
             hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
         if cross_attention_dim is None:
@@ -237,8 +255,8 @@ def main():
         else:
             layer_name_prefix = name.split('.processor')[0]
             weights = {
-                'to_k_ip.weight': unet_state_dict[layer_name_prefix + 'to_k.weight'],
-                'to_v_ip.weight': unet_state_dict[layer_name_prefix + 'to_v.weight']
+                'to_k_ip.weight': unet_state_dict[layer_name_prefix + '.to_k.weight'],
+                'to_v_ip.weight': unet_state_dict[layer_name_prefix + '.to_v.weight']
             }
             # Assign IP-Adapter-based Attention mechanism
             attn_procs[name] = IPAttnProcessor(
