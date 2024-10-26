@@ -109,12 +109,29 @@ def parse_args():
         default=1996,
         help='A seed for reproducible training'
     )
+    ### IP-Adapter hyperparams ###
     parser.add_argument(
         '--num_tokens',
         type=int,
         default=16,
-        help='Number of tokens which is used as input of the perceiver resampler of IP-Adapter'
+        help='Number of tokens (query tokens) which is used as input of the perceiver resampler of IP-Adapter.'
     )
+    parser.add_argument(
+        '--depth',
+        type=int,
+        default=4,
+    )
+    parser.add_argument(
+        '--head_dim',
+        type=int,
+        default=64,
+    )
+    parser.add_argument(
+        '--head_num',
+        type=int,
+        default=12,
+    )
+    ### End ###
     parser.add_argument(
         '--allow_tf32',
         action='store_false',
@@ -233,7 +250,7 @@ def main():
     text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='text_encoder')
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder='vae', torch_dtype=torch.float16) # float16 vs float32 -> which one to choose?
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path)
-    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet')
+    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
 
     # Load IP-Adapter for joint training with Denoising U-net.
     # We load the existing adapter modules from the original U-net
@@ -270,13 +287,13 @@ def main():
     # Load Ip-adapter pretrained weights
     ip_state_dict = torch.load(args.pretrained_ip_adapter_path, map_location='cpu')
     
-    adapter_modules = torch.nn.ModuleList(unet.attention_processors.values())
+    adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
     adapter_modules.load_state_dict(ip_state_dict['ip_adapter'], strict=True) # Load weights from Linear Layers (k, v) of pretrained IP-Adatper
     
     # Init projection layer for IP-Adapter
     # Here we use perceiver from Flamingo paper
     image_proj_model = Resampler(
-        dim=image_encoder.config.hidden_size,
+        dim=unet.config.cross_attention_dim,
         depth=args.depth,
         dim_head=args.head_dim,
         heads=args.head_num,
@@ -290,7 +307,7 @@ def main():
     # for a better control because we could avoid directly modify the code inside of unet_2d_condition.py
     # But this will make this training code hard to read and refractor with new training strategy.
     unet.encoder_hid_proj = image_proj_model
-    unet.config.update({'encoder_hidden_dim_type': 'ip_image_proj'})
+    unet.config['encoder_hid_dim_type'] = 'ip_image_proj'
 
     # Update the first convolution layer to works with additional inputs
     if args.use_densepose:
@@ -305,7 +322,7 @@ def main():
             padding=1,
         )
         conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
-        conv_new.weight.data[:, unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
+        conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
         conv_new.bias.data = unet.conv_in.bias.data
         unet.conv_in = conv_new
         unet.config['in_channels'] = new_in_channels
@@ -367,7 +384,7 @@ def main():
 
     # hey Huggingface team, why do you want to need to override this poor variable (overrode...)
     overrode_max_train_steps = False
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumlation_steps)
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
         args.max_train_steps = num_update_steps_per_epoch * args.num_train_epochs
         overrode_max_train_steps = True
@@ -395,9 +412,9 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Initialize tracker, store the configuration
-    if accelerator.is_main_process:
-        tracker_config = dict(vars(args))
-        accelerator.init_trackers(args.tracker_project_name, tracker_config)
+    # if accelerator.is_main_process:
+    #     tracker_config = dict(vars(args))
+    #     accelerator.init_trackers(args.tracker_project_name, tracker_config)
 
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
     logger.info("********* Running Training *********")
@@ -425,10 +442,12 @@ def main():
                 masked_images = vae.encode(batch['masked_image'].to(dtype=weight_dtype)).latent_dist.sample()
                 masked_images = masked_images * vae.config.scaling_factor
                 masks = batch['mask'].to(dtype=weight_dtype)
-                masks = F.interpolate(masks, size=(args.height//8, args.weight//8))
+                masks = F.interpolate(masks, size=(args.height//8, args.width//8))
                 
                 # Get text condition
-                text_prompts = ['']*len(batch['captions']) # we set input text prompts as a list of empty strings
+                # we set input text prompts as a list of empty strings
+                # text_prompts = ['']*len(batch['captions'])
+                text_prompts = [''] * args.train_batch_size
                 text_ids = tokenizer(
                     text_prompts,
                     max_length=tokenizer.model_max_length,
@@ -438,7 +457,7 @@ def main():
                 ).input_ids
                 encoder_hidden_states = text_encoder(text_ids.to(device)).last_hidden_state # use last feature layer from CLIP Text Encoder
                     
-                image_embeds = image_encoder(batch['clip_image'].to(device, dtype=weight_dtype))
+                image_embeds = image_encoder(batch['cloth'].to(device, dtype=weight_dtype))
                 ip_image_embeds = image_proj_model(image_embeds)
                 added_cond_kwargs = {'image_embeds': ip_image_embeds}
 
