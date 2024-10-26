@@ -31,7 +31,7 @@ def _download_dataset(
             return None
 
         with open(file_path, 'wb') as f:
-            # increase chunk size to could decrease download time
+            # increase chunk size could decrease download time
             for chunk in tqdm(r.iter_content(chunk_size=128)):
                 f.write(chunk)
 
