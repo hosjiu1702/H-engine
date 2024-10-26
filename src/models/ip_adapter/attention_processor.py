@@ -11,6 +11,7 @@ class AttnProcessor2_0(torch.nn.Module):
     """
 
     def __init__(self):
+        super().__init__()
         if not hasattr(F, "scaled_dot_product_attention"):
             raise ImportError("AttnProcessor2_0 requires PyTorch 2.0, to use it, please upgrade PyTorch to 2.0.")
 
