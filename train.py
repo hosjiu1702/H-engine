@@ -23,7 +23,7 @@ from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjec
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration
-import tqdm
+from tqdm import tqdm
 
 from src.utils.utils import set_seed, set_train, use_gradient_accumulation
 from src.models.ip_adapter.attention_processor import (
