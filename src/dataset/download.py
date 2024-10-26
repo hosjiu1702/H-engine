@@ -2,8 +2,8 @@ from typing import Text, Optional
 from pathlib import Path
 from shutil import unpack_archive
 import os
+from os.path import isfile
 import sys
-import argparse
 import requests
 from tqdm import tqdm
 from src.utils import get_project_root
@@ -27,7 +27,8 @@ def _download_dataset(
         file_ext = '.zip'
         file_path = Path(save_path, file_name).with_suffix(file_ext)
 
-        if file_path.exists or os.path.isfile(os.path.join(save_path, 'train_pairs.txt')):
+        if isfile(file_path) or isfile(os.path.join(save_path, 'train_pairs.txt')):
+            breakpoint()
             return None
 
         with open(file_path, 'wb') as f:
