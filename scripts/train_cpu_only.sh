@@ -1,4 +1,4 @@
-CUDA_VISIBLE_VISIBLE="0" accelerate launch \
+accelerate launch --cpu \
 train.py \
 --pretrained_ip_adapter_path=checkpoints/ip-adapter-plus_sd15.bin \
 --data_dir=datasets/vitonhd \
