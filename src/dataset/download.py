@@ -28,7 +28,6 @@ def _download_dataset(
         file_path = Path(save_path, file_name).with_suffix(file_ext)
 
         if isfile(file_path) or isfile(os.path.join(save_path, 'train_pairs.txt')):
-            breakpoint()
             return None
 
         with open(file_path, 'wb') as f:
