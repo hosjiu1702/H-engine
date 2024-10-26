@@ -456,7 +456,7 @@ def main():
                     return_tensors='pt',
                 ).input_ids
                 encoder_hidden_states = text_encoder(text_ids.to(device)).last_hidden_state # use last feature layer from CLIP Text Encoder
-                    
+
                 image_embeds = image_encoder(batch['cloth'].to(device, dtype=weight_dtype))
                 ip_image_embeds = image_proj_model(image_embeds)
                 added_cond_kwargs = {'image_embeds': ip_image_embeds}
