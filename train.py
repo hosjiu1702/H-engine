@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 from diffusers import DDPMScheduler, AutoencoderKL, UNet2DConditionModel
 from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
 from accelerate import Accelerator
-from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration
 from tqdm import tqdm
 
@@ -28,9 +27,6 @@ from src.models.ip_adapter.attention_processor import (
 )
 from src.models.ip_adapter.resampler import Resampler
 from src.dataset.vitonhd import VITONHDDataset
-
-
-logger = get_logger(__name__, log_level="INFO")
 
 
 def parse_args():
@@ -75,7 +71,7 @@ def parse_args():
     parser.add_argument(
         '--total_limit_states',
         type=int,
-        default=5,
+        default=3,
         help='the maximum value which control the number of saved model state dict'
     )
     parser.add_argument(
@@ -85,6 +81,12 @@ def parse_args():
         help=('The tracker is used to report the results and logs to. '
               'Supported platforms are `"tensorboard"`, `"wandb"` (Default)'
         )
+    )
+    parser.add_argument(
+        '--project_name',
+        type=str,
+        default='Finetune inpainting UNet',
+        help='Project name for init with wandb'
     )
     parser.add_argument(
         '--mixed_precision',
@@ -282,7 +284,7 @@ def main():
     unet.set_attn_processor(attn_procs) # Reload attn processors with new ones
 
     # Load Ip-adapter pretrained weights
-    ip_state_dict = torch.load(args.pretrained_ip_adapter_path, map_location='cpu')
+    ip_state_dict = torch.load(args.pretrained_ip_adapter_path, map_location='cpu', weights_only=True)
     
     adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
     adapter_modules.load_state_dict(ip_state_dict['ip_adapter'], strict=True) # Load weights from Linear Layers (k, v) of pretrained IP-Adatper
@@ -346,7 +348,7 @@ def main():
         torch.backends.cuda.matmul.allow_tf32 = True
 
     # Define optimizer
-    params_to_opt = itertools.chain(unet.parameters(), image_proj_model.parameters())
+    params_to_opt = itertools.chain(unet.parameters()) # IP-Adapter was already joined into unet
     optimizer = torch.optim.AdamW(
         params_to_opt,
         lr=args.lr,
@@ -416,18 +418,21 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Initialize tracker, store the configuration
-    # if accelerator.is_main_process:
-    #     tracker_config = dict(vars(args))
-    #     accelerator.init_trackers(args.tracker_project_name, tracker_config)
+    if accelerator.is_main_process:
+        accelerator.init_trackers(
+            project_name=args.project_name,
+            config=dict(vars(args)),
+        )
 
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
-    logger.info("********* Running Training *********")
-    logger.info(f"  Num examples = {len(train_dataset)}")
-    logger.info(f"  Num epochs = {args.num_train_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
-    logger.info(f"  Gradient accumulation steps = {args.gradient_accumulation_steps}")
-    logger.info(f"  Total optimization steps = {args.max_train_steps}")
+    accelerator.print("\n********* Running Training *********")
+    accelerator.print(f"  Num examples = {len(train_dataset)}")
+    accelerator.print(f"  Num epochs = {args.num_train_epochs}")
+    accelerator.print(f"  Instantaneous batch size per device = {args.train_batch_size}")
+    accelerator.print(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    accelerator.print(f"  Gradient accumulation steps = {args.gradient_accumulation_steps}")
+    accelerator.print(f"  Total optimization steps = {args.max_train_steps}")
+    accelerator.print("********* Running Training *********\n")
 
     progress_bar = tqdm(
         range(0, args.max_train_steps),
@@ -515,7 +520,7 @@ def main():
                             save_path = os.path.join(args.output_dir, 'checkpoints', f'ckpt-{global_steps}')
                             os.makeddirs(save_path, exist_ok=True)
                             accelerator.save_state(save_path, safe_serialization=False)
-                            logger.info(f'Saved state to {save_path}')
+                            accelerator.print(f'Saved state to {save_path}')
                             # Save (unet + ip-adapter)
                             # CAUTION: this code snippet below potentially cause
                             # your hard disk overflow and the training machine crash
@@ -535,7 +540,7 @@ def main():
                     break
 
     accelerator.end_training()
-    logger.info('======== Training End ========')
+    accelerator.print('======== Training End ========')
 
 
 if __name__ == '__main__':
