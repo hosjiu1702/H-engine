@@ -14,17 +14,24 @@ import argparse
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from diffusers import DDPMScheduler, AutoencoderKL, UNet2DConditionModel
+from diffusers import DDPMScheduler, AutoencoderKL
 from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
 from tqdm import tqdm
 
-from src.utils.utils import set_seed, set_train, use_gradient_accumulation, total_trainable_params
+from src.utils import (
+    set_seed,
+    set_train,
+    use_gradient_accumulation,
+    total_trainable_params,
+    generate_rand_chars,
+)
 from src.models.ip_adapter.attention_processor import (
     AttnProcessor2_0 as AttnProcessor,
     IPAttnProcessor2_0 as IPAttnProcessor
 )
+from src.models.unet_2d_condition import UNet2DConditionModel
 from src.models.ip_adapter.resampler import Resampler
 from src.dataset.vitonhd import VITONHDDataset
 
@@ -93,7 +100,7 @@ def parse_args():
         type=str,
         default=None,
         choices=['no', 'fp16', 'bf16'],
-        help='Whether to use mixed precision'
+        help='Whether to use mixed precision training.'
     )
     parser.add_argument(
         '--gradient_accumulation_steps',
@@ -281,7 +288,7 @@ def main():
                 num_tokens=args.num_tokens
             )
             attn_procs[name].load_state_dict(weights) # init linear layers of new k, v from the existing ones respectively
-    unet.set_attn_processor(attn_procs) # Reload attn processors with new ones
+    unet.set_attn_processor(attn_procs) # Reload unet attn processors with new ones
 
     # Load Ip-adapter pretrained weights
     ip_state_dict = torch.load(args.pretrained_ip_adapter_path, map_location='cpu', weights_only=True)
@@ -331,7 +338,7 @@ def main():
     set_train(text_encoder, False)
     set_train(image_encoder, False)
 
-    # Trainable
+    # Trainable modules
     set_train(unet, True)
     set_train(image_proj_model, True)
 
@@ -339,7 +346,7 @@ def main():
     accelerator.print(f'VAE: {total_trainable_params(vae)}')
     accelerator.print(f'Text Encoder: {total_trainable_params(text_encoder)}')
     accelerator.print(f'Image Encoder (CLIP): {total_trainable_params(image_encoder)}')
-    accelerator.print(f'UNet: {total_trainable_params(unet)}')
+    accelerator.print(f'UNet: {total_trainable_params(unet) - total_trainable_params(unet.encoder_hid_proj)}')
     accelerator.print(f'Image Projection Model (Perceiver Resampler): {total_trainable_params(image_proj_model)}')
     accelerator.print('==== Trainable Params ====\n')
 
@@ -466,7 +473,7 @@ def main():
                     truncation=True,
                     return_tensors='pt',
                 ).input_ids
-                encoder_hidden_states = text_encoder(text_ids.to(device)).last_hidden_state # use last feature layer from CLIP Text Encoder
+                encoder_hidden_states = text_encoder(text_ids.to(device)).last_hidden_state # use last layer features from CLIP Text Encoder
 
                 image_embeds = image_encoder(batch['cloth'].to(device, dtype=weight_dtype)).last_hidden_state # use last layer features of CLIP
                 ip_image_embeds = image_proj_model(image_embeds)
@@ -517,8 +524,9 @@ def main():
                     if global_steps % args.checkpointing_steps == 0:
                         if accelerator.is_main_process:
                             # Just for resuming when we want to continue training from the last state
-                            save_path = os.path.join(args.output_dir, 'checkpoints', f'ckpt-{global_steps}')
-                            os.makeddirs(save_path, exist_ok=True)
+                            rand_name = generate_rand_chars()
+                            save_path = os.path.join(args.output_dir, rand_name, 'checkpoints', f'ckpt-{global_steps}')
+                            os.makedirs(save_path, exist_ok=True)
                             accelerator.save_state(save_path, safe_serialization=False)
                             accelerator.print(f'Saved state to {save_path}')
                             # Save (unet + ip-adapter)
@@ -527,8 +535,8 @@ def main():
                             # if it is not handled properly!
                             unwrapped_unet = accelerator.unwrap_model(unet)
                             unwrapped_ipadapter = accelerator.unwrap_model(image_proj_model)
-                            unet_path = os.path.join(args.output_dir, f'unet-{global_steps}.pth')
-                            ipadapter_path = os.path.join(args.output_dir, f'ipadapter-{global_steps}.pth')
+                            unet_path = os.path.join(args.output_dir, rand_name, f'unet-{global_steps}.pt')
+                            ipadapter_path = os.path.join(args.output_dir, rand_name, f'ipadapter-{global_steps}.pt')
                             accelerator.save(unwrapped_unet, unet_path, safe_serialization=False)
                             accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
                             del unwrapped_unet
