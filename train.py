@@ -239,6 +239,7 @@ def main():
                 gradient_accumulation_steps=args.gradient_accumulation_steps,
                 project_config=project_config
             )
+    device = accelerator.device
 
     # For reproducibility
     if args.seed:
@@ -377,7 +378,6 @@ def main():
 
     # cast all non-trainable weights to half-precision
     # as these weights are only used for inference, keeping weights in full precision is not required
-    device = accelerator.device
     vae.to(device, dtype=weight_dtype)
     text_encoder.to(device, dtype=weight_dtype)
     image_encoder.to(device, dtype=weight_dtype)
@@ -457,7 +457,7 @@ def main():
                 ).input_ids
                 encoder_hidden_states = text_encoder(text_ids.to(device)).last_hidden_state # use last feature layer from CLIP Text Encoder
 
-                image_embeds = image_encoder(batch['cloth'].to(device, dtype=weight_dtype))
+                image_embeds = image_encoder(batch['cloth'].to(device, dtype=weight_dtype)).last_hidden_state # use last layer features of CLIP
                 ip_image_embeds = image_proj_model(image_embeds)
                 added_cond_kwargs = {'image_embeds': ip_image_embeds}
 
@@ -469,7 +469,7 @@ def main():
                 # this is diffusion forward pass
                 noise = torch.randn_like(latents).to(device, dtype=weight_dtype)
                 bs = latents.shape[0]
-                timesteps = torch.randint(0, noise_scheduler.num_train_steps, (bs,))
+                timesteps = torch.randint(0, noise_scheduler.num_train_timesteps, (bs,), device=device) # DDIM Scheduler
                 timesteps = timesteps.long()
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
