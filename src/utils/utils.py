@@ -23,8 +23,9 @@ def set_seed(seed: int):
 def set_train(module: torch.nn.Module, is_train: bool = True):
     if is_train:
         module.requires_grad_(True)
-    module.requires_grad_(False)
-        
+    else:
+        module.requires_grad_(False)
+
 
 def use_gradient_accumulation(val: int) -> bool:
     return True if val > 1 else False
@@ -32,3 +33,7 @@ def use_gradient_accumulation(val: int) -> bool:
 
 def get_project_root() -> Path:
     return Path(__file__).parent.parent.parent
+
+
+def total_trainable_params(model: torch.nn.Module):
+    return sum([p.numel() for p in model.parameters() if p.requires_grad])
