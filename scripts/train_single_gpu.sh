@@ -11,4 +11,5 @@ train.py \
 --num_workers=4 \
 --num_train_epochs=4 \
 --max_train_steps=12000 \
---checkpointing_steps=5000
+--checkpointing_steps=5000 \
+--project_name=Full_ft_IPAdapter_UNet
