@@ -1,4 +1,5 @@
 import random
+import string
 import os
 from pathlib import Path
 import numpy as np
@@ -37,3 +38,8 @@ def get_project_root() -> Path:
 
 def total_trainable_params(model: torch.nn.Module):
     return sum([p.numel() for p in model.parameters() if p.requires_grad])
+
+
+# https://stackoverflow.com/a/2257449/7890329
+def generate_rand_chars(size=10):
+    return ''.join([random.choice(string.ascii_lowercase + string.digits) for _ in range(size)])
