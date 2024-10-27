@@ -14,18 +14,14 @@ import argparse
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from diffusers import (
-    DDPMScheduler,
-    AutoencoderKL,
-    UNet2DConditionModel
-)
+from diffusers import DDPMScheduler, AutoencoderKL, UNet2DConditionModel
 from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration
 from tqdm import tqdm
 
-from src.utils.utils import set_seed, set_train, use_gradient_accumulation
+from src.utils.utils import set_seed, set_train, use_gradient_accumulation, total_trainable_params
 from src.models.ip_adapter.attention_processor import (
     AttnProcessor2_0 as AttnProcessor,
     IPAttnProcessor2_0 as IPAttnProcessor
@@ -134,7 +130,7 @@ def parse_args():
     ### End ###
     parser.add_argument(
         '--allow_tf32',
-        action='store_false',
+        action='store_true',
         help='Whether or not to allow TF32 on Ampere GPUs.'
     )
     parser.add_argument(
@@ -332,10 +328,18 @@ def main():
     set_train(vae, False)
     set_train(text_encoder, False)
     set_train(image_encoder, False)
-    
+
     # Trainable
     set_train(unet, True)
     set_train(image_proj_model, True)
+
+    accelerator.print('\n==== Trainable Params ====')
+    accelerator.print(f'VAE: {total_trainable_params(vae)}')
+    accelerator.print(f'Text Encoder: {total_trainable_params(text_encoder)}')
+    accelerator.print(f'Image Encoder (CLIP): {total_trainable_params(image_encoder)}')
+    accelerator.print(f'UNet: {total_trainable_params(unet)}')
+    accelerator.print(f'Image Projection Model (Perceiver Resampler): {total_trainable_params(image_proj_model)}')
+    accelerator.print('==== Trainable Params ====\n')
 
     # Enable TF32 for faster training on Ampere GPUs (and later)
     if args.allow_tf32:
@@ -441,6 +445,8 @@ def main():
                 latents = latents * vae.config.scaling_factor
                 masked_images = vae.encode(batch['masked_image'].to(dtype=weight_dtype)).latent_dist.sample()
                 masked_images = masked_images * vae.config.scaling_factor
+                densepose = vae.encode(batch['densepose'].to(dtype=weight_dtype)).latent_dist.sample()
+                densepose = densepose * vae.config.scaling_factor
                 masks = batch['mask'].to(dtype=weight_dtype)
                 masks = F.interpolate(masks, size=(args.height//8, args.width//8))
                 
@@ -461,19 +467,21 @@ def main():
                 ip_image_embeds = image_proj_model(image_embeds)
                 added_cond_kwargs = {'image_embeds': ip_image_embeds}
 
+                # Move to device (e.g, GPUs)
                 latents.to(device, dtype=weight_dtype)
                 masked_images.to(device, dtype=weight_dtype)
+                densepose.to(device, dtype=weight_dtype)
                 masks.to(device, dtype=weight_dtype)
 
                 # Add Gaussian noise to input for each timestep
                 # this is diffusion forward pass
                 noise = torch.randn_like(latents).to(device, dtype=weight_dtype)
                 bs = latents.shape[0]
-                timesteps = torch.randint(0, noise_scheduler.num_train_timesteps, (bs,), device=device) # DDIM Scheduler
+                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bs,), device=device) # DDIM Scheduler
                 timesteps = timesteps.long()
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
-                unet_input = torch.cat([noisy_latents, masks, masked_images], dim=1) # concatenate in channel dim
+                unet_input = torch.cat([noisy_latents, masks, masked_images, densepose], dim=1) # concatenate in channel dim
                 noise_pred = unet(unet_input, timesteps, encoder_hidden_states, added_cond_kwargs=added_cond_kwargs).sample # Denoising or diffusion backward process
                 loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
 
@@ -482,7 +490,7 @@ def main():
                 # I'am not sure but IMO they probably use DDP (Distributed Data Parallel)
                 # behind the scene so feel free check it out if you want to learn more on this concept
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean() # this line from Huggingface Accelerate is suck :)
-                if not use_gradient_accumulation(args.gradient_accumlation_steps):
+                if not use_gradient_accumulation(args.gradient_accumulation_steps):
                     train_loss += avg_loss.item()
                 else:
                     train_loss += avg_loss.item() / args.gradient_accumulation_steps
