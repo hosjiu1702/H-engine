@@ -78,7 +78,7 @@ class VITONHDDataset(Dataset):
         dp = self.transform(dp)
 
         # Mask
-        mask = Image.open(self.m_paths[index])
+        mask = Image.open(self.m_paths[index]).convert('L')
         mask = mask.resize((self.width, self.height))
         mask = self.totensor(mask)
         # A dirty snippet code that check if this is a binary matrix
