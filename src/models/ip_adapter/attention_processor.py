@@ -132,7 +132,7 @@ class IPAttnProcessor2_0(torch.nn.Module):
         self,
         attn,
         hidden_states,
-        encoder_hidden_states=None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
         attention_mask=None,
         temb=None,
         scale=1.0

@@ -1033,7 +1033,7 @@ class UNet2DConditionModel(
 
             image_embeds = added_cond_kwargs.get("image_embeds")
             # image_embeds = self.encoder_hid_proj(image_embeds) # we already projected `image_embeds`
-            encoder_hidden_states = (encoder_hidden_states, image_embeds)
+            encoder_hidden_states = torch.cat([encoder_hidden_states, image_embeds], dim=1)
         return encoder_hidden_states
 
     def forward(

@@ -313,6 +313,7 @@ def main():
     # for a better control because we could avoid directly modify the code inside of unet_2d_condition.py
     # But this will make this training code hard to read and refractor with new training strategy.
     unet.encoder_hid_proj = image_proj_model
+    unet.config.encoder_hid_dim_type = 'ip_image_proj'
     unet.config['encoder_hid_dim_type'] = 'ip_image_proj'
 
     # Update the first convolution layer to works with additional inputs
@@ -332,6 +333,7 @@ def main():
         conv_new.bias.data = unet.conv_in.bias.data
         unet.conv_in = conv_new
         unet.config['in_channels'] = new_in_channels
+        unet.config.in_channels = new_in_channels
 
     # Freeze some modules
     set_train(vae, False)
