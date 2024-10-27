@@ -6,8 +6,9 @@ train.py \
 --train_batch_size=4 \
 --gradient_accumulation_steps=2 \
 --allow_tf32 \
+--use_densepose \
 --mixed_precision=fp16 \
---num_workers=4 \
+--num_workers=0 \
 --num_train_epochs=4 \
 --max_train_steps=12000 \
 --checkpointing_steps=5000
