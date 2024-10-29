@@ -380,7 +380,7 @@ def main():
         width=args.width,
         use_CLIPVision=True
     )
-    if not args.use_subset:
+    if args.use_subset:
         # get only first ten samples
         train_dataset = Subset(train_dataset, [n for n in range(5)])
     train_dataloader = DataLoader(
