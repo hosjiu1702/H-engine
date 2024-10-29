@@ -83,6 +83,11 @@ Folder structure:
 │   │   │   ├── [000006_00_keypoints.json | 000008_00_keypoints.json | ...]
 ```
 
+## Downloads Models
+#### IP-Adapter
+Download `ip-adapter-plus_sd15.bin` from [here](https://huggingface.co/h94/IP-Adapter/blob/main/models/ip-adapter-plus_sd15.bin) and put it under the `checkpoints/` folder.
+
+
 ## Training
 #### 1. Train on cpu
 ```
