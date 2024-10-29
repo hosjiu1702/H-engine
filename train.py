@@ -13,7 +13,7 @@ import argparse
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from diffusers import DDPMScheduler, AutoencoderKL
 from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
 from accelerate import Accelerator
@@ -74,6 +74,10 @@ def parse_args():
         type=str,
         required=True,
         help='Path to the dataset which is used to train model.'
+    )
+    parser.add_argument(
+        '--use_subset',
+        action='store_true'
     )
     parser.add_argument(
         '--total_limit_states',
@@ -376,6 +380,9 @@ def main():
         width=args.width,
         use_CLIPVision=True
     )
+    if not args.use_subset:
+        # get only first ten samples
+        train_dataset = Subset(train_dataset, [n for n in range(5)])
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_size=args.train_batch_size,
