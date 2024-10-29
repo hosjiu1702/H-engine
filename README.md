@@ -12,6 +12,7 @@
 - [x] training code *(still under active development)*
 - [ ] inference code
 - [ ] evaluation
+- [ ] legacy code (old pipeline)
 - [ ] Gradio demo
 
 ## Project Structure
