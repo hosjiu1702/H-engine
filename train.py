@@ -467,7 +467,8 @@ def main():
                 # Get text condition
                 # we set input text prompts as a list of empty strings
                 # text_prompts = ['']*len(batch['captions'])
-                text_prompts = [''] * args.train_batch_size
+                dummy_captions = [''] * len(batch['image']) # a dirty fix
+                text_prompts = dummy_captions
                 text_ids = tokenizer(
                     text_prompts,
                     max_length=tokenizer.model_max_length,
