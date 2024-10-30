@@ -1,6 +1,20 @@
 """
-Adapted from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_inpaint.py
+https://github.com/huggingface/diffusers/blob/v0.30.3/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_inpaint.py
 """
+# Copyright 2024 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -9,7 +23,7 @@ import torch
 from packaging import version
 from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection
 
-from diffuers.callbacks import MultiPipelineCallbacks, PipelineCallback
+from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.configuration_utils import FrozenDict
 from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
 from diffusers.loaders import FromSingleFileMixin, IPAdapterMixin, StableDiffusionLoraLoaderMixin, TextualInversionLoaderMixin
@@ -19,7 +33,7 @@ from diffusers.schedulers import KarrasDiffusionSchedulers
 from diffusers.utils import USE_PEFT_BACKEND, deprecate, logging, scale_lora_layers, unscale_lora_layers
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusionMixin
-from diffusers.pipelines.stable_diffusion.pipeline_output import StableDiffusionPipelineOutput
+from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
 
@@ -100,7 +114,7 @@ def retrieve_timesteps(
     return timesteps, num_inference_steps
 
 
-class TryonPipeline(
+class TryOnPipeline(
     DiffusionPipeline,
     StableDiffusionMixin,
     TextualInversionLoaderMixin,
@@ -226,8 +240,9 @@ class TryonPipeline(
             unet._internal_dict = FrozenDict(new_config)
 
         # Check shapes, assume num_channels_latents == 4, num_channels_mask == 1, num_channels_masked == 4
-        if unet.config.in_channels != 9:
+        if unet.config.in_channels != 13:
             logger.info(f"You have loaded a UNet with {unet.config.in_channels} input channels which.")
+            logger.info("Maybe you do not use densepose in your input.")
 
         self.register_modules(
             vae=vae,
@@ -464,7 +479,7 @@ class TryonPipeline(
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_image
     def encode_image(self, image, device, num_images_per_prompt, output_hidden_states=None):
-        dtype = next(self.image_encoder.parameters()).dtype
+        dtype = next(self.image_encoder.parameters()).dtype # what does this line do?
 
         if not isinstance(image, torch.Tensor):
             image = self.feature_extractor(image, return_tensors="pt").pixel_values
@@ -489,31 +504,32 @@ class TryonPipeline(
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_ip_adapter_image_embeds
     def prepare_ip_adapter_image_embeds(
-        self, ip_adapter_image, ip_adapter_image_embeds, device, num_images_per_prompt, do_classifier_free_guidance
+        self,
+        ip_adapter_image,
+        ip_adapter_image_embeds,
+        device, num_images_per_prompt,
+        do_classifier_free_guidance
     ):
         image_embeds = []
         if do_classifier_free_guidance:
             negative_image_embeds = []
         if ip_adapter_image_embeds is None:
-            if not isinstance(ip_adapter_image, list):
-                ip_adapter_image = [ip_adapter_image]
+            # if not isinstance(ip_adapter_image, list):
+            #     ip_adapter_image = [ip_adapter_image]
 
-            if len(ip_adapter_image) != len(self.unet.encoder_hid_proj.image_projection_layers):
-                raise ValueError(
-                    f"`ip_adapter_image` must have same length as the number of IP Adapters. Got {len(ip_adapter_image)} images and {len(self.unet.encoder_hid_proj.image_projection_layers)} IP Adapters."
-                )
+            # if len(ip_adapter_image) != len(self.unet.encoder_hid_proj.image_projection_layers):
+            #     raise ValueError(
+            #         f"`ip_adapter_image` must have same length as the number of IP Adapters. Got {len(ip_adapter_image)} images and {len(self.unet.encoder_hid_proj.image_projection_layers)} IP Adapters."
+            #     )
 
-            for single_ip_adapter_image, image_proj_layer in zip(
-                ip_adapter_image, self.unet.encoder_hid_proj.image_projection_layers
-            ):
-                output_hidden_state = not isinstance(image_proj_layer, ImageProjection)
-                single_image_embeds, single_negative_image_embeds = self.encode_image(
-                    single_ip_adapter_image, device, 1, output_hidden_state
-                )
+            # output_hidden_state = not isinstance(self.unet.encoder_hid_proj, ImageProjection)
+            single_image_embeds, single_negative_image_embeds = self.encode_image(
+                ip_adapter_image, device, 1
+            )
 
-                image_embeds.append(single_image_embeds[None, :])
-                if do_classifier_free_guidance:
-                    negative_image_embeds.append(single_negative_image_embeds[None, :])
+            image_embeds.append(single_image_embeds[None, :])
+            if do_classifier_free_guidance:
+                negative_image_embeds.append(single_negative_image_embeds[None, :])
         else:
             for single_image_embeds in ip_adapter_image_embeds:
                 if do_classifier_free_guidance:
@@ -854,6 +870,7 @@ class TryonPipeline(
         prompt: Union[str, List[str]] = None,
         image: PipelineImageInput = None,
         mask_image: PipelineImageInput = None,
+        densepose: PipelineImageInput = None,
         masked_image_latents: torch.Tensor = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -1134,6 +1151,7 @@ class TryonPipeline(
             resize_mode = "default"
 
         original_image = image
+        # preprocess original image before feeding into VAE
         init_image = self.image_processor.preprocess(
             image, height=height, width=width, crops_coords=crops_coords, resize_mode=resize_mode
         )
@@ -1144,6 +1162,7 @@ class TryonPipeline(
         num_channels_unet = self.unet.config.in_channels
         return_image_latents = num_channels_unet == 4
 
+        # Pixel space  --> Latent space
         latents_outputs = self.prepare_latents(
             batch_size * num_images_per_prompt,
             num_channels_latents,
@@ -1170,6 +1189,7 @@ class TryonPipeline(
             mask_image, height=height, width=width, resize_mode=resize_mode, crops_coords=crops_coords
         )
 
+        # Get masked image from the provided binary mask
         if masked_image_latents is None:
             masked_image = init_image * (mask_condition < 0.5)
         else:
