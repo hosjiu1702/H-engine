@@ -168,8 +168,8 @@ class TryOnPipeline(
         tokenizer: CLIPTokenizer,
         unet: UNet2DConditionModel,
         scheduler: KarrasDiffusionSchedulers,
-        safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPImageProcessor,
+        safety_checker: StableDiffusionSafetyChecker = None,
         image_encoder: CLIPVisionModelWithProjection = None,
         requires_safety_checker: bool = True,
     ):
