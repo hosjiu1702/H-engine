@@ -481,6 +481,7 @@ class TryOnPipeline(
     def encode_image(self, image, device, num_images_per_prompt, output_hidden_states=None):
         dtype = next(self.image_encoder.parameters()).dtype # what does this line do?
 
+        # Preprocess IP image before sending it CLIP Vision
         if not isinstance(image, torch.Tensor):
             image = self.feature_extractor(image, return_tensors="pt").pixel_values
 
@@ -523,10 +524,10 @@ class TryOnPipeline(
             #     )
 
             # output_hidden_state = not isinstance(self.unet.encoder_hid_proj, ImageProjection)
+            # image --> CLIP Image Encoder
             single_image_embeds, single_negative_image_embeds = self.encode_image(
                 ip_adapter_image, device, 1
             )
-
             image_embeds.append(single_image_embeds[None, :])
             if do_classifier_free_guidance:
                 negative_image_embeds.append(single_negative_image_embeds[None, :])
