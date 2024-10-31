@@ -22,6 +22,7 @@ import PIL.Image
 import torch
 from packaging import version
 from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection
+from torchvision.transforms import v2
 
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.configuration_utils import FrozenDict
@@ -259,6 +260,13 @@ class TryOnPipeline(
         self.mask_processor = VaeImageProcessor(
             vae_scale_factor=self.vae_scale_factor, do_normalize=False, do_binarize=True, do_convert_grayscale=True
         )
+        self.transform = v2.Compose(
+            [
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+            ]
+        )
         self.register_to_config(requires_safety_checker=requires_safety_checker)
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline._encode_prompt
@@ -479,7 +487,7 @@ class TryOnPipeline(
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_image
     def encode_image(self, image, device, num_images_per_prompt, output_hidden_states=None):
-        dtype = next(self.image_encoder.parameters()).dtype # what does this line do?
+        dtype = next(self.image_encoder.parameters()).dtype # what does this line do, just getting dtype?
 
         # Preprocess IP image before sending it CLIP Vision
         if not isinstance(image, torch.Tensor):
@@ -497,7 +505,7 @@ class TryOnPipeline(
             )
             return image_enc_hidden_states, uncond_image_enc_hidden_states
         else:
-            image_embeds = self.image_encoder(image).image_embeds
+            image_embeds = self.image_encoder(image).image_embeds # pooled output ([CLS] + Normalization) -- Projection --> image_embeds, shape [1, 512] w/ CLIP
             image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
             uncond_image_embeds = torch.zeros_like(image_embeds)
 
@@ -506,9 +514,10 @@ class TryOnPipeline(
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_ip_adapter_image_embeds
     def prepare_ip_adapter_image_embeds(
         self,
-        ip_adapter_image,
+        ip_adapter_image: PIL.Image.Image,
         ip_adapter_image_embeds,
-        device, num_images_per_prompt,
+        device,
+        num_images_per_prompt,
         do_classifier_free_guidance
     ):
         image_embeds = []
@@ -524,11 +533,9 @@ class TryOnPipeline(
             #     )
 
             # output_hidden_state = not isinstance(self.unet.encoder_hid_proj, ImageProjection)
-            # image --> CLIP Image Encoder
-            single_image_embeds, single_negative_image_embeds = self.encode_image(
-                ip_adapter_image, device, 1
-            )
-            image_embeds.append(single_image_embeds[None, :])
+            # [image] -- CLIP Preprocessing --> [processed_image] -- CLIP Image Encoding --> [image_embeds]
+            single_image_embeds, single_negative_image_embeds = self.encode_image(ip_adapter_image, device, 1)
+            image_embeds.append(single_image_embeds[None, :]) # [x[None, :] has shape [1, 1, 512]
             if do_classifier_free_guidance:
                 negative_image_embeds.append(single_negative_image_embeds[None, :])
         else:
@@ -871,7 +878,7 @@ class TryOnPipeline(
         prompt: Union[str, List[str]] = None,
         image: PipelineImageInput = None,
         mask_image: PipelineImageInput = None,
-        densepose: PipelineImageInput = None,
+        densepose_image: PipelineImageInput = None,
         masked_image_latents: torch.Tensor = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -1152,16 +1159,21 @@ class TryOnPipeline(
             resize_mode = "default"
 
         original_image = image
+
         # preprocess original image before feeding into VAE
         init_image = self.image_processor.preprocess(
-            image, height=height, width=width, crops_coords=crops_coords, resize_mode=resize_mode
+            image,
+            height=height,
+            width=width,
+            crops_coords=crops_coords,
+            resize_mode=resize_mode
         )
         init_image = init_image.to(dtype=torch.float32)
 
         # 6. Prepare latent variables
-        num_channels_latents = self.vae.config.latent_channels
-        num_channels_unet = self.unet.config.in_channels
-        return_image_latents = num_channels_unet == 4
+        num_channels_latents = self.vae.config.latent_channels # default is 4
+        num_channels_unet = self.unet.config.in_channels # in inpainting w/ densepose input this param has value 13
+        return_image_latents = num_channels_unet == 4 # will be false
 
         # Pixel space  --> Latent space
         latents_outputs = self.prepare_latents(
@@ -1208,12 +1220,22 @@ class TryOnPipeline(
             self.do_classifier_free_guidance,
         )
 
+        # Densepose preprocessing
+        if not isinstance(densepose_image, PIL.Image.Image):
+            raise ValueError(f'{type(densepose_image)} is not supported yet now. Please use `PIL Image` instead.')
+        densepose_image = densepose_image.resize((width, height))
+        densepose_image = self.transform(densepose_image)
+        densepose_image.to(device=device, dtype=prompt_embeds.dtype)
+        densepose_latents = self.vae.encode(densepose_image).latent_dist.sample()
+        densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is interested thing to understand :)
+
         # 8. Check that sizes of mask, masked image and latents match
-        if num_channels_unet == 9:
+        if num_channels_unet == 13:
             # default case for runwayml/stable-diffusion-inpainting
             num_channels_mask = mask.shape[1]
             num_channels_masked_image = masked_image_latents.shape[1]
-            if num_channels_latents + num_channels_mask + num_channels_masked_image != self.unet.config.in_channels:
+            num_channels_densepose_image = densepose_latents.shape[1]
+            if num_channels_latents + num_channels_mask + num_channels_masked_image + num_channels_densepose_image != self.unet.config.in_channels:
                 raise ValueError(
                     f"Incorrect configuration settings! The config of `pipeline.unet`: {self.unet.config} expects"
                     f" {self.unet.config.in_channels} but received `num_channels_latents`: {num_channels_latents} +"
@@ -1221,10 +1243,10 @@ class TryOnPipeline(
                     f" = {num_channels_latents+num_channels_masked_image+num_channels_mask}. Please verify the config of"
                     " `pipeline.unet` or your `mask_image` or `image` input."
                 )
-        elif num_channels_unet != 4:
-            raise ValueError(
-                f"The unet {self.unet.__class__} should have either 4 or 9 input channels, not {self.unet.config.in_channels}."
-            )
+        # elif num_channels_unet != 4:
+        #     raise ValueError(
+        #         f"The unet {self.unet.__class__} should have either 4 or 9 input channels, not {self.unet.config.in_channels}."
+        #     )
 
         # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
@@ -1255,11 +1277,11 @@ class TryOnPipeline(
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
 
-                # concat latents, mask, masked_image_latents in the channel dimension
+                # concat (latents, mask, masked_image_latents, densepose_latents) in the channel dimension
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                if num_channels_unet == 9:
-                    latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
+                if num_channels_unet == 13:
+                    latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents, densepose_latents], dim=1)
 
                 # predict the noise residual
                 noise_pred = self.unet(
@@ -1313,7 +1335,7 @@ class TryOnPipeline(
                         step_idx = i // getattr(self.scheduler, "order", 1)
                         callback(step_idx, t, latents)
 
-        if not output_type == "latent":
+        if output_type == "pil":
             condition_kwargs = {}
             if isinstance(self.vae, AsymmetricAutoencoderKL):
                 init_image = init_image.to(device=device, dtype=masked_image_latents.dtype)
@@ -1322,19 +1344,15 @@ class TryOnPipeline(
                 mask_condition = mask_condition.to(device=device, dtype=masked_image_latents.dtype)
                 condition_kwargs = {"image": init_image_condition, "mask": mask_condition}
             image = self.vae.decode(
-                latents / self.vae.config.scaling_factor, return_dict=False, generator=generator, **condition_kwargs
+                latents / self.vae.config.scaling_factor,
+                return_dict=False,
+                generator=generator,
+                **condition_kwargs
             )[0]
-            image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
         else:
             image = latents
-            has_nsfw_concept = None
 
-        if has_nsfw_concept is None:
-            do_denormalize = [True] * image.shape[0]
-        else:
-            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
-
-        image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
+        image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=None)
 
         if padding_mask_crop is not None:
             image = [self.image_processor.apply_overlay(mask_image, original_image, i, crops_coords) for i in image]
@@ -1343,6 +1361,6 @@ class TryOnPipeline(
         self.maybe_free_model_hooks()
 
         if not return_dict:
-            return (image, has_nsfw_concept)
+            return (image,)
 
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
+        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=None)
