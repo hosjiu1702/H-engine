@@ -1,10 +1,11 @@
-# Modified from:
+# Modified or got inspired from:
 # - https://github.com/miccunifi/ladi-vton/blob/master/src/train_vto.py
 # - https://github.com/tencent-ailab/IP-Adapter/blob/main/ip_adapter/attention_processor.py
 # - https://github.com/yisol/IDM-VTON/blob/1b39608bf3b6f075b21562e86302dcefd6989fc5/train_xl.py
 # - https://github.com/lyc0929/OOTDiffusion-train/blob/main/run/ootd_train.py
 # - https://github.com/luxiaolili/IDM-VTON-train/blob/main/train.py
 # - https://github.dev/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image.py
+# - https://github.com/huggingface/diffusers/blob/main/examples/dreambooth/train_dreambooth.py
 
 import itertools
 import math
@@ -15,7 +16,8 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 from diffusers import DDPMScheduler, AutoencoderKL
-from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection
+from diffusers.utils import is_wandb_available
+from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection, CLIPImageProcessor
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
 from tqdm import tqdm
@@ -32,8 +34,13 @@ from src.models.ip_adapter.attention_processor import (
     IPAttnProcessor2_0 as IPAttnProcessor
 )
 from src.models.unet_2d_condition import UNet2DConditionModel
+from src.pipelines.tryon import TryOnPipeline
 from src.models.ip_adapter.resampler import Resampler
 from src.dataset.vitonhd import VITONHDDataset
+
+
+if is_wandb_available():
+    import wandb
 
 
 def parse_args():
@@ -259,6 +266,7 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder='tokenizer')
     text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='text_encoder')
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder='vae', torch_dtype=torch.float16) # float16 vs float32 -> which one to choose?
+    image_processor = CLIPImageProcessor()
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path)
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
 
@@ -530,27 +538,51 @@ def main():
                     progress_bar.update(1)
                     accelerator.log({'train_loss': train_loss}, step=global_steps) # log to predefined tracker, for example, wandb
                     train_loss = 0.
-                    # Saves model at a certain training step
-                    if global_steps % args.checkpointing_steps == 0:
-                        if accelerator.is_main_process:
+                    if accelerator.is_main_process:
+                        # Saves model at a certain training step
+                        if global_steps % args.checkpointing_steps == 0:
                             # Just for resuming when we want to continue training from the last state
                             rand_name = generate_rand_chars()
                             save_path = os.path.join(args.output_dir, rand_name, 'checkpoints', f'ckpt-{global_steps}')
                             os.makedirs(save_path, exist_ok=True)
                             accelerator.save_state(save_path, safe_serialization=False)
                             accelerator.print(f'Saved state to {save_path}')
+                        # Generate to do test or validation (some kinds of sanity check)
+                        if global_steps % args.validation_steps == 0:
+                            unwrapped_unet = accelerator.unwrap_model(unet)
+                            unwrapped_ipadapter = accelerator.unwrap_model(image_proj_model)
+                            with torch.no_grad():
+                                pipe = TryOnPipeline(
+                                    vae=vae,
+                                    text_encoder=text_encoder,
+                                    tokenizer=tokenizer,
+                                    unet=unwrapped_unet,
+                                    scheduler=noise_scheduler,
+                                    feature_extractor=image_processor, # CLIP Image Processor
+                                    image_encoder=image_encoder # CLIP Vision Encoder
+                                ).to(device)
+                                with torch.amp.autocast():
+                                    images = pipe(
+                                        prompt=text_prompts,
+                                        image=batch['image'],
+                                        mask_image=batch['mask'],
+                                        densepose_image=batch['densepose'],
+                                        masked_image_latents=batch['mased_image'],
+                                        ip_adapter_image=batch['cloth'],
+                                    ).images
+                                    if args.report_to == 'wandb':
+                                        wandb_tracker = accelerator.get_tracker('wandb')
+                                        wandb_tracker.log({'validation': [wandb.Image(image) for image in images]})
                             # Save (unet + ip-adapter)
                             # CAUTION: this code snippet below potentially cause
                             # your hard disk overflow and the training machine crash
                             # if it is not handled properly!
-                            unwrapped_unet = accelerator.unwrap_model(unet)
-                            unwrapped_ipadapter = accelerator.unwrap_model(image_proj_model)
-                            unet_path = os.path.join(args.output_dir, rand_name, f'unet-{global_steps}.pt')
-                            ipadapter_path = os.path.join(args.output_dir, rand_name, f'ipadapter-{global_steps}.pt')
-                            accelerator.save(unwrapped_unet, unet_path, safe_serialization=False)
-                            accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
-                            del unwrapped_unet
-                            del unwrapped_ipadapter
+                            # unet_path = os.path.join(args.output_dir, rand_name, f'unet-{global_steps}.pt')
+                            # ipadapter_path = os.path.join(args.output_dir, rand_name, f'ipadapter-{global_steps}.pt')
+                            # accelerator.save(unwrapped_unet, unet_path, safe_serialization=False)
+                            # accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
+                            # del unwrapped_unet
+                            # del unwrapped_ipadapter
                 logs = {'step_loss': loss.detach().item()}
                 progress_bar.set_postfix(**logs)
  
