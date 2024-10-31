@@ -10,6 +10,7 @@
 
 ## TODO LIST
 - [x] training code *(still under active development)*
+- [x] pipeline code *(in progress)*
 - [ ] inference code
 - [ ] evaluation
 - [ ] legacy code (old pipeline)
