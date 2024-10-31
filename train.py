@@ -228,6 +228,12 @@ def parse_args():
         )
     )
     parser.add_argument(
+        '--validation_steps',
+        type=int,
+        default=1000,
+        help='Run validation every X steps.'
+    )
+    parser.add_argument(
         '--use_densepose',
         action='store_true',
         help='Whether or not use densepose alongside with (mask, agnostic image and original image)'
