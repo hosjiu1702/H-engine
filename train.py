@@ -567,7 +567,9 @@ def main():
                                     feature_extractor=image_processor, # CLIP Image Processor
                                     image_encoder=image_encoder # CLIP Vision Encoder
                                 ).to(device)
-                                with torch.amp.autocast():
+                                # allows to run in mixed precision mode
+                                # not using in backward pass
+                                with torch.amp.autocast(device):
                                     images = pipe(
                                         prompt=text_prompts,
                                         image=batch['image'],
