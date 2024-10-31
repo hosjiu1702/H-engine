@@ -569,7 +569,7 @@ def main():
                                 ).to(device)
                                 # allows to run in mixed precision mode
                                 # not using in backward pass
-                                with torch.amp.autocast(device):
+                                with torch.amp.autocast(device.type):
                                     images = pipe(
                                         prompt=text_prompts,
                                         image=batch['image'],
