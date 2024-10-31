@@ -1221,10 +1221,10 @@ class TryOnPipeline(
         )
 
         # Densepose preprocessing
-        if not isinstance(densepose_image, PIL.Image.Image):
-            raise ValueError(f'{type(densepose_image)} is not supported yet now. Please use `PIL Image` instead.')
-        densepose_image = densepose_image.resize((width, height))
-        densepose_image = self.transform(densepose_image)
+        # if not isinstance(densepose_image, PIL.Image.Image):
+        #     raise ValueError(f'{type(densepose_image)} is not supported yet now. Please use `PIL Image` instead.')
+        # densepose_image = densepose_image.resize((width, height))
+        # densepose_image = self.transform(densepose_image)
         densepose_image.to(device=device, dtype=prompt_embeds.dtype)
         densepose_latents = self.vae.encode(densepose_image).latent_dist.sample()
         densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is interested thing to understand :)
