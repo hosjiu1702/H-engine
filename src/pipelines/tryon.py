@@ -1228,6 +1228,7 @@ class TryOnPipeline(
         densepose_image.to(device=device, dtype=prompt_embeds.dtype)
         densepose_latents = self.vae.encode(densepose_image).latent_dist.sample()
         densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is interested thing to understand :)
+        densepose_latents = torch.cat([densepose_latents] * 2) if self.do_classifier_free_guidance else densepose_latents
 
         # 8. Check that sizes of mask, masked image and latents match
         if num_channels_unet == 13:
