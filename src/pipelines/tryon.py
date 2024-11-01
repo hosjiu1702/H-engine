@@ -1130,7 +1130,7 @@ class TryOnPipeline(
                 device,
                 batch_size * num_images_per_prompt,
                 self.do_classifier_free_guidance,
-            )[0]
+            )
             image_embeds = self.unet.encoder_hid_proj(image_embeds).to(dtype=prompt_embeds.dtype) # Perceiver Resampler
 
         # 4. set timesteps
