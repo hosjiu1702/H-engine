@@ -554,7 +554,9 @@ class TryOnPipeline(
             single_image_embeds = single_image_embeds.to(device=device)
             ip_adapter_image_embeds.append(single_image_embeds)
 
-        return ip_adapter_image_embeds
+        assert len(ip_adapter_image_embeds) == 1
+
+        return ip_adapter_image_embeds[0].squeeze(1)
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.run_safety_checker
     def run_safety_checker(self, image, device, dtype):
