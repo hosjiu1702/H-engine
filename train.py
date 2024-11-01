@@ -575,8 +575,10 @@ def main():
                                         image=batch['image'],
                                         mask_image=batch['mask'],
                                         densepose_image=batch['densepose'],
-                                        masked_image_latents=batch['masked_image'],
+                                        # masked_image_latents=batch['masked_image'],
                                         ip_adapter_image=batch['cloth'],
+                                        height=args.height,
+                                        width=args.width,
                                     ).images
                                     if args.report_to == 'wandb':
                                         wandb_tracker = accelerator.get_tracker('wandb')
