@@ -533,7 +533,7 @@ class TryOnPipeline(
 
             output_hidden_state = not isinstance(self.unet.encoder_hid_proj, ImageProjection)
             # [image] -- CLIP Preprocessing --> [processed_image] -- CLIP Image Encoding --> [image_embeds]
-            single_image_embeds, single_negative_image_embeds = self.encode_image(ip_adapter_image, device, 1)
+            single_image_embeds, single_negative_image_embeds = self.encode_image(ip_adapter_image, device, 1, output_hidden_state)
             image_embeds.append(single_image_embeds[None, :]) # [x[None, :] has shape [1, 1, 512]
             if do_classifier_free_guidance:
                 negative_image_embeds.append(single_negative_image_embeds[None, :])
