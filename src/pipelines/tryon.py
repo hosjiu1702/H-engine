@@ -1130,6 +1130,7 @@ class TryOnPipeline(
                 batch_size * num_images_per_prompt,
                 self.do_classifier_free_guidance,
             )
+            image_embeds = self.unet.encoder_hid_proj(image_embeds).to(dtype=prompt_embeds.dtype) # Perceiver Resampler
 
         # 4. set timesteps
         timesteps, num_inference_steps = retrieve_timesteps(
@@ -1230,7 +1231,7 @@ class TryOnPipeline(
         # densepose_image = densepose_image.resize((width, height))
         # densepose_image = self.transform(densepose_image)
         densepose_image = self.image_processor.preprocess(densepose_image, height, width)
-        densepose_latents = self.vae.encode(densepose_image).latent_dist.sample()
+        densepose_latents = self.vae.encode(densepose_image).latent_dist.sample(generator=generator)
         densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is interested thing to understand :)
         densepose_latents = torch.cat([densepose_latents] * 2) if self.do_classifier_free_guidance else densepose_latents
         densepose_latents.to(device=device, dtype=prompt_embeds.dtype)
