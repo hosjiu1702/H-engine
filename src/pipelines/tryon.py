@@ -1199,7 +1199,11 @@ class TryOnPipeline(
 
         # 7. Prepare mask latent variables
         mask_condition = self.mask_processor.preprocess(
-            mask_image, height=height, width=width, resize_mode=resize_mode, crops_coords=crops_coords
+            mask_image,
+            height=height,
+            width=width,
+            resize_mode=resize_mode,
+            crops_coords=crops_coords
         )
 
         # Get masked image from the provided binary mask
@@ -1225,10 +1229,11 @@ class TryOnPipeline(
         #     raise ValueError(f'{type(densepose_image)} is not supported yet now. Please use `PIL Image` instead.')
         # densepose_image = densepose_image.resize((width, height))
         # densepose_image = self.transform(densepose_image)
-        densepose_image.to(device=device, dtype=prompt_embeds.dtype)
+        densepose_image = self.image_processor.preprocess(densepose_image, height, width)
         densepose_latents = self.vae.encode(densepose_image).latent_dist.sample()
         densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is interested thing to understand :)
         densepose_latents = torch.cat([densepose_latents] * 2) if self.do_classifier_free_guidance else densepose_latents
+        densepose_latents.to(device=device, dtype=prompt_embeds.dtype)
 
         # 8. Check that sizes of mask, masked image and latents match
         if num_channels_unet == 13:
