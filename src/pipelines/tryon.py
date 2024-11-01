@@ -495,17 +495,16 @@ class TryOnPipeline(
 
         image = image.to(device=device, dtype=dtype)
         if output_hidden_states:
-            image_enc_hidden_states = self.image_encoder(image, output_hidden_states=True).hidden_states[-2]
+            # image_enc_hidden_states = self.image_encoder(image, output_hidden_states=True).hidden_states[-2]
+            image_enc_hidden_states = self.image_encoder(image).last_hidden_state
             image_enc_hidden_states = image_enc_hidden_states.repeat_interleave(num_images_per_prompt, dim=0)
-            uncond_image_enc_hidden_states = self.image_encoder(
-                torch.zeros_like(image), output_hidden_states=True
-            ).hidden_states[-2]
+            uncond_image_enc_hidden_states = self.image_encoder(torch.zeros_like(image)).last_hidden_state
             uncond_image_enc_hidden_states = uncond_image_enc_hidden_states.repeat_interleave(
                 num_images_per_prompt, dim=0
             )
             return image_enc_hidden_states, uncond_image_enc_hidden_states
         else:
-            image_embeds = self.image_encoder(image).image_embeds # pooled output ([CLS] + Normalization) -- Projection --> image_embeds, shape [1, 512] w/ CLIP
+            image_embeds = self.image_encoder(image).image_embeds
             image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
             uncond_image_embeds = torch.zeros_like(image_embeds)
 
@@ -532,7 +531,7 @@ class TryOnPipeline(
             #         f"`ip_adapter_image` must have same length as the number of IP Adapters. Got {len(ip_adapter_image)} images and {len(self.unet.encoder_hid_proj.image_projection_layers)} IP Adapters."
             #     )
 
-            # output_hidden_state = not isinstance(self.unet.encoder_hid_proj, ImageProjection)
+            output_hidden_state = not isinstance(self.unet.encoder_hid_proj, ImageProjection)
             # [image] -- CLIP Preprocessing --> [processed_image] -- CLIP Image Encoding --> [image_embeds]
             single_image_embeds, single_negative_image_embeds = self.encode_image(ip_adapter_image, device, 1)
             image_embeds.append(single_image_embeds[None, :]) # [x[None, :] has shape [1, 1, 512]
