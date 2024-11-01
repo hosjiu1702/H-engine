@@ -395,7 +395,7 @@ def main():
         use_CLIPVision=True
     )
     if args.use_subset:
-        # get only first ten samples
+        # get only first x samples
         train_dataset = Subset(train_dataset, [n for n in range(5)])
     train_dataloader = DataLoader(
         dataset=train_dataset,
