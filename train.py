@@ -595,6 +595,7 @@ def main():
                             # accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
                             del unwrapped_unet
                             del unwrapped_ipadapter
+                            del pipe
                 logs = {'step_loss': loss.detach().item()}
                 progress_bar.set_postfix(**logs)
  
