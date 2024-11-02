@@ -593,7 +593,7 @@ def main():
                                             output_img = Image.new('RGB', (img.width * 2, img.height))
                                             output_img.paste(img, (0, 0))
                                             output_img.paste(origin_img, (img.width, 0))
-                                            results.append(wandb_tracker.Image(output_img))
+                                            results.append(wandb.Image(output_img))
                                         wandb_tracker.log({
                                             'validation': results
                                         })
