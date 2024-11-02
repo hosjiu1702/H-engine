@@ -93,7 +93,7 @@ class VITONHDDataset(Dataset):
         masked_img = self.transform(masked_img)
 
         item.update({
-            'original_image': origin_img,
+            'original_image': self.totensor(origin_img),
             'image': img,
             'masked_image': masked_img,
             'mask': mask,
