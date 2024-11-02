@@ -21,6 +21,8 @@ from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjec
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
 from tqdm import tqdm
+from torchvision.transforms.functional import to_pil_image
+from PIL import Image
 
 from src.utils import (
     set_seed,
@@ -581,10 +583,20 @@ def main():
                                         ip_adapter_image=batch['cloth'],
                                         height=args.height,
                                         width=args.width,
-                                    ).images
+                                    ).images # pil
                                     if args.report_to == 'wandb':
                                         wandb_tracker = accelerator.get_tracker('wandb')
-                                        wandb_tracker.log({'validation': [wandb.Image(image) for image in images]})
+                                        # concate generated image and original image for comparison
+                                        results = []
+                                        for img, origin_img in zip(images, batch['original_image']):
+                                            origin_img = to_pil_image(origin_img)
+                                            output_img = Image.new('RGB', (img.width * 2, img.height))
+                                            output_img.paste(img, (0, 0))
+                                            output_img.paste(origin_img, (img.width, 0))
+                                            results.append(wandb_tracker.Image(output_img))
+                                        wandb_tracker.log({
+                                            'validation': results
+                                        })
                             # Save (unet + ip-adapter)
                             # CAUTION: this code snippet below potentially cause
                             # your hard disk overflow and the training machine crash
