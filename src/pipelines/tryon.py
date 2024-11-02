@@ -241,7 +241,7 @@ class TryOnPipeline(
             unet._internal_dict = FrozenDict(new_config)
 
         # Check shapes, assume num_channels_latents == 4, num_channels_mask == 1, num_channels_masked == 4
-        if unet.config.in_channels != 13:
+        if unet.config.in_channels != 16:
             logger.info(f"You have loaded a UNet with {unet.config.in_channels} input channels which.")
             logger.info("Maybe you do not use densepose in your input.")
 
@@ -851,6 +851,7 @@ class TryOnPipeline(
         image: PipelineImageInput = None,
         mask_image: PipelineImageInput = None,
         densepose_image: PipelineImageInput = None,
+        cloth_img: PipelineImageInput = None,
         masked_image_latents: torch.Tensor = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -1208,8 +1209,14 @@ class TryOnPipeline(
         densepose_latents = torch.cat([densepose_latents] * 2) if self.do_classifier_free_guidance else densepose_latents
         densepose_latents.to(device=device, dtype=prompt_embeds.dtype)
 
+        cloth_img = self.image_processor.preprocess(cloth_img, height, width)
+        cloth_latents = self.vae.encode(cloth_img).latent_dist.sample(generator=generator)
+        cloth_latents = cloth_latents * self.vae.config.scaling_factor # this factor is interested thing to understand :)
+        cloth_latents = torch.cat([cloth_latents] * 2) if self.do_classifier_free_guidance else cloth_latents
+        cloth_latents.to(device=device, dtype=prompt_embeds.dtype)
+
         # 8. Check that sizes of mask, masked image and latents match
-        if num_channels_unet == 13:
+        if num_channels_unet == 16:
             # default case for runwayml/stable-diffusion-inpainting
             num_channels_mask = mask.shape[1]
             num_channels_masked_image = masked_image_latents.shape[1]
@@ -1259,8 +1266,8 @@ class TryOnPipeline(
                 # concat (latents, mask, masked_image_latents, densepose_latents) in the channel dimension
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                if num_channels_unet == 13:
-                    latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents, densepose_latents], dim=1)
+                if num_channels_unet == 16:
+                    latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents, densepose_latents, cloth_latents], dim=1)
 
                 # predict the noise residual
                 noise_pred = self.unet(
