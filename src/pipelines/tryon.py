@@ -1221,7 +1221,8 @@ class TryOnPipeline(
             num_channels_mask = mask.shape[1]
             num_channels_masked_image = masked_image_latents.shape[1]
             num_channels_densepose_image = densepose_latents.shape[1]
-            if num_channels_latents + num_channels_mask + num_channels_masked_image + num_channels_densepose_image != self.unet.config.in_channels:
+            num_channels_cloth_image = cloth_latents.shape[1]
+            if num_channels_latents + num_channels_mask + num_channels_masked_image + num_channels_densepose_image + num_channels_cloth_image != self.unet.config.in_channels:
                 raise ValueError(
                     f"Incorrect configuration settings! The config of `pipeline.unet`: {self.unet.config} expects"
                     f" {self.unet.config.in_channels} but received `num_channels_latents`: {num_channels_latents} +"
