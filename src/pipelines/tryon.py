@@ -532,11 +532,10 @@ class TryOnPipeline(
             #     )
 
             output_hidden_state = not isinstance(self.unet.encoder_hid_proj, ImageProjection)
-            # [image] -- CLIP Preprocessing --> [processed_image] -- CLIP Image Encoding --> [image_embeds]
             single_image_embeds, single_negative_image_embeds = self.encode_image(ip_adapter_image, device, 1, output_hidden_state)
-            image_embeds.append(single_image_embeds[None, :]) # [x[None, :] has shape [1, 1, 512]
+            image_embeds.append(single_image_embeds)
             if do_classifier_free_guidance:
-                negative_image_embeds.append(single_negative_image_embeds[None, :])
+                negative_image_embeds.append(single_negative_image_embeds)
         else:
             for single_image_embeds in ip_adapter_image_embeds:
                 if do_classifier_free_guidance:
@@ -554,9 +553,7 @@ class TryOnPipeline(
             single_image_embeds = single_image_embeds.to(device=device)
             ip_adapter_image_embeds.append(single_image_embeds)
 
-        assert len(ip_adapter_image_embeds) == 1
-
-        return ip_adapter_image_embeds[0].squeeze(1)
+        return ip_adapter_image_embeds[0]
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.run_safety_checker
     def run_safety_checker(self, image, device, dtype):
