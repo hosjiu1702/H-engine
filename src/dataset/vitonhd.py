@@ -64,7 +64,7 @@ class VITONHDDataset(Dataset):
 
         # Person image
         img = Image.open(self.im_paths[index])
-        img = img.resize((self.width, self.height))
+        origin_img = img = img.resize((self.width, self.height))
         img = self.transform(img)
 
         # Cloth
@@ -93,6 +93,7 @@ class VITONHDDataset(Dataset):
         masked_img = self.transform(masked_img)
 
         item.update({
+            'original_image': origin_img,
             'image': img,
             'masked_image': masked_img,
             'mask': mask,
