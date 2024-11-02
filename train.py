@@ -394,9 +394,11 @@ def main():
         width=args.width,
         use_CLIPVision=True
     )
+
     if args.use_subset:
         # get only first x samples
         train_dataset = Subset(train_dataset, [n for n in range(5)])
+
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_size=args.train_batch_size,
@@ -591,8 +593,8 @@ def main():
                             # ipadapter_path = os.path.join(args.output_dir, rand_name, f'ipadapter-{global_steps}.pt')
                             # accelerator.save(unwrapped_unet, unet_path, safe_serialization=False)
                             # accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
-                            # del unwrapped_unet
-                            # del unwrapped_ipadapter
+                            del unwrapped_unet
+                            del unwrapped_ipadapter
                 logs = {'step_loss': loss.detach().item()}
                 progress_bar.set_postfix(**logs)
  
