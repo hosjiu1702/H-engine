@@ -608,6 +608,7 @@ def main():
                             del unwrapped_unet
                             del unwrapped_ipadapter
                             del pipe
+                            torch.cuda.empty_cache()
                 logs = {'step_loss': loss.detach().item()}
                 progress_bar.set_postfix(**logs)
  
