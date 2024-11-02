@@ -338,7 +338,7 @@ def main():
 
     # Update the first convolution layer to works with additional inputs
     if args.use_densepose:
-        new_in_channels = 16 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image) + 4 (cloth)
+        new_in_channels = 17 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image) + 4 (cloth)
     else:
         new_in_channels = 9
     with torch.no_grad():

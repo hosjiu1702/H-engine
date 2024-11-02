@@ -241,7 +241,7 @@ class TryOnPipeline(
             unet._internal_dict = FrozenDict(new_config)
 
         # Check shapes, assume num_channels_latents == 4, num_channels_mask == 1, num_channels_masked == 4
-        if unet.config.in_channels != 16:
+        if unet.config.in_channels != 17:
             logger.info(f"You have loaded a UNet with {unet.config.in_channels} input channels which.")
             logger.info("Maybe you do not use densepose in your input.")
 
@@ -1216,7 +1216,7 @@ class TryOnPipeline(
         cloth_latents.to(device=device, dtype=prompt_embeds.dtype)
 
         # 8. Check that sizes of mask, masked image and latents match
-        if num_channels_unet == 16:
+        if num_channels_unet == 17:
             # default case for runwayml/stable-diffusion-inpainting
             num_channels_mask = mask.shape[1]
             num_channels_masked_image = masked_image_latents.shape[1]
@@ -1266,7 +1266,7 @@ class TryOnPipeline(
                 # concat (latents, mask, masked_image_latents, densepose_latents) in the channel dimension
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                if num_channels_unet == 16:
+                if num_channels_unet == 17:
                     latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents, densepose_latents, cloth_latents], dim=1)
 
                 # predict the noise residual
