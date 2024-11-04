@@ -107,8 +107,8 @@ def parse_args():
     )
     parser.add_argument(
         '--use_tracker',
-        type=bool,
-        default=True,
+        type=str,
+        default='true',
         help='Whether or not to use tracker to track experiments.'
     )
     parser.add_argument(
