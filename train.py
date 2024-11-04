@@ -100,6 +100,12 @@ def parse_args():
         help='the maximum value which control the number of saved model state dict'
     )
     parser.add_argument(
+        '--use_tracker',
+        type=bool,
+        default=True,
+        help='Whether or not to use tracker to track experiments.'
+    )
+    parser.add_argument(
         '--report_to',
         type=str,
         default='wandb',
@@ -458,11 +464,12 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Initialize tracker, store the configuration
-    if accelerator.is_main_process:
-        accelerator.init_trackers(
-            project_name=args.project_name,
-            config=dict(vars(args)),
-        )
+    if args.use_tracker:
+        if accelerator.is_main_process:
+            accelerator.init_trackers(
+                project_name=args.project_name,
+                config=dict(vars(args)),
+            )
 
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
     accelerator.print("\n********* Running Training *********")
@@ -590,7 +597,7 @@ def main():
                                         height=args.height,
                                         width=args.width,
                                     ).images # pil
-                                    if args.report_to == 'wandb':
+                                    if args.report_to == 'wandb' and args.use_tracker:
                                         wandb_tracker = accelerator.get_tracker('wandb')
                                         # concate generated image and original image for comparison
                                         results = []
