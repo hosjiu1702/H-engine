@@ -412,7 +412,7 @@ def main():
         height=args.height,
         width=args.width,
         use_CLIPVision=True,
-        downscale=True if args.downscale is not None else False
+        downscale=args.downscale
     )
 
     if args.use_subset:
