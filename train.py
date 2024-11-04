@@ -412,8 +412,8 @@ def main():
         use_trainset=True,
         use_paired_data=True,
         use_augmentation=False,
-        height=args.height
-        width=args.width
+        height=args.height,
+        width=args.width,
         use_CLIPVision=True,
     )
 
