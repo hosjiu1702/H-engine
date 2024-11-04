@@ -605,7 +605,7 @@ def main():
                                         height=args.height,
                                         width=args.width,
                                     ).images # pil
-                                    if args.report_to == 'wandb' and args.use_tracker:
+                                    if args.report_to == 'wandb' and str2bool(args.use_tracker):
                                         wandb_tracker = accelerator.get_tracker('wandb')
                                         # concate generated image and original image for comparison
                                         results = []
