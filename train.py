@@ -88,6 +88,11 @@ def parse_args():
         '--use_subset',
         action='store_true'
     )
+    parser.add_argument(
+        '--num_subset_samples',
+        type=int,
+        default=10
+    )
     parser.add_arugment(
         '--downscale',
         action='store_true'
@@ -410,8 +415,8 @@ def main():
     )
 
     if args.use_subset:
-        # get only first x samples
-        train_dataset = Subset(train_dataset, [n for n in range(4)])
+        # get only first `num_subset_samples` samples
+        train_dataset = Subset(train_dataset, [n for n in range(args.num_subset_samples)])
 
     train_dataloader = DataLoader(
         dataset=train_dataset,
