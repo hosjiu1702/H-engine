@@ -404,15 +404,17 @@ def main():
     )
     
     # Load dataset for training
+    if args.downscale:
+        vars(args)['height'] = args.height // 2
+        vars(args)['width'] = args.width // 2
     train_dataset = VITONHDDataset(
         data_rootpath=args.data_dir,
         use_trainset=True,
         use_paired_data=True,
         use_augmentation=False,
-        height=args.height,
-        width=args.width,
+        height=args.height
+        width=args.width
         use_CLIPVision=True,
-        downscale=args.downscale
     )
 
     if args.use_subset:
@@ -506,8 +508,8 @@ def main():
                 densepose = vae.encode(batch['densepose'].to(dtype=weight_dtype)).latent_dist.sample()
                 densepose = densepose * vae.config.scaling_factor
                 masks = batch['mask'].to(dtype=weight_dtype)
-                masks = F.interpolate(masks, size=(latents.shape[-2] // 8, latents.shape[-1] // 8))
-
+                masks = F.interpolate(masks, size=(args.height // 8, args.width // 8))
+                
                 # Get text condition
                 # we set input text prompts as a list of empty strings
                 # text_prompts = ['']*len(batch['captions'])
