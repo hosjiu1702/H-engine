@@ -88,6 +88,11 @@ def parse_args():
         '--use_subset',
         action='store_true'
     )
+    parser.add_arugment(
+        '--downscale',
+        action='store_true'
+        help='where or not to downscale all of images in the provided dataset.'
+    )
     parser.add_argument(
         '--total_limit_states',
         type=int,
@@ -394,7 +399,8 @@ def main():
         use_augmentation=False,
         height=args.height,
         width=args.width,
-        use_CLIPVision=True
+        use_CLIPVision=True,
+        downscale=True if args.downscale is not None else False
     )
 
     if args.use_subset:

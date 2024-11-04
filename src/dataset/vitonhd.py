@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Text, Union, List
 from pathlib import Path
 import os
@@ -6,6 +7,11 @@ from torch.utils.data import Dataset
 from torchvision.transforms import v2
 from PIL import Image
 from transformers import CLIPImageProcessor
+
+
+@dataclass
+class DownscaleResolution: 
+    resolution = (512, 384)
 
 
 class VITONHDDataset(Dataset):
@@ -19,6 +25,7 @@ class VITONHDDataset(Dataset):
             height: int = 1024,
             width: int = 768,
             use_CLIPVision: bool = True,
+            downscale: bool = False
     ):
         super(VITONHDDataset, self).__init__()
         self.data_rootpath = data_rootpath
@@ -28,6 +35,7 @@ class VITONHDDataset(Dataset):
         self.height = height
         self.width = width
         self.use_CLIPVision = use_CLIPVision
+        self.downscale = downscale
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
         self.transform = v2.Compose(
@@ -62,23 +70,37 @@ class VITONHDDataset(Dataset):
     def __getitem__(self, index):
         item = {}
 
-        # Person image
         img = Image.open(self.im_paths[index])
+        c = Image.open(self.c_paths[index])
+        dp = Image.open(self.dp_paths[index])
+        mask = Image.open(self.m_paths[index]).convert('L')
+        masked_img = Image.open(self.agn_paths[index])
+
+        if self.downscale:
+            new_size = DownscaleResolution.resolution
+
+            img = img.resize(new_size)
+            c = c.resize(new_size)
+            dp = dp.resize(new_size)
+            mask = mask.resize(new_size)
+            masked_img = masked_img.resize(new_size)
+
+            self.height = new_size[0]
+            self.width = new_size[1]
+
+        # Person image
         origin_img = img = img.resize((self.width, self.height))
         img = self.transform(img)
 
         # Cloth
-        c = Image.open(self.c_paths[index])
         c = self.image_processor(images=c, return_tensors='pt').pixel_values
         c = c.squeeze(0)
         
         # Densepose
-        dp = Image.open(self.dp_paths[index])
         dp = dp.resize((self.width, self.height))
         dp = self.transform(dp)
 
         # Mask
-        mask = Image.open(self.m_paths[index]).convert('L')
         mask = mask.resize((self.width, self.height))
         mask = self.totensor(mask)
         # A dirty snippet code that check if this is a binary matrix
@@ -88,7 +110,6 @@ class VITONHDDataset(Dataset):
         # assert len(uni_elems) == 2
 
         # Masked image (agnostic image)
-        masked_img = Image.open(self.agn_paths[index])
         masked_img = masked_img.resize((self.width, self.height))
         masked_img = self.transform(masked_img)
 
