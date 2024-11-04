@@ -93,7 +93,7 @@ def parse_args():
         type=int,
         default=10
     )
-    parser.add_arugment(
+    parser.add_argument(
         '--downscale',
         action='store_true',
         help='where or not to downscale all of images in the provided dataset.'
