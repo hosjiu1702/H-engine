@@ -30,6 +30,7 @@ from src.utils import (
     use_gradient_accumulation,
     total_trainable_params,
     generate_rand_chars,
+    str2bool,
 )
 from src.models.ip_adapter.attention_processor import (
     AttnProcessor2_0 as AttnProcessor,
@@ -469,7 +470,7 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Initialize tracker, store the configuration
-    if args.use_tracker:
+    if str2bool(args.use_tracker):
         if accelerator.is_main_process:
             accelerator.init_trackers(
                 project_name=args.project_name,

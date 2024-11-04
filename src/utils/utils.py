@@ -1,3 +1,4 @@
+import argparse
 import random
 import string
 import os
@@ -43,3 +44,13 @@ def total_trainable_params(model: torch.nn.Module):
 # https://stackoverflow.com/a/2257449/7890329
 def generate_rand_chars(size=10):
     return ''.join([random.choice(string.ascii_lowercase + string.digits) for _ in range(size)])
+
+
+# https://stackoverflow.com/a/43357954/7890329
+def str2bool(v):
+    if v.lower() == 'true':
+        return True
+    elif v.lower() == 'false':
+        return False
+    else:
+        argparse.ArgumentTypeError('boolean value expected.')
