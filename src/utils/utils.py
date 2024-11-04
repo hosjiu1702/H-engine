@@ -48,7 +48,9 @@ def generate_rand_chars(size=10):
 
 # https://stackoverflow.com/a/43357954/7890329
 def str2bool(v):
-    if v.lower() == 'true':
+    if isinstance(v, bool):
+        return v
+    elif v.lower() == 'true':
         return True
     elif v.lower() == 'false':
         return False
