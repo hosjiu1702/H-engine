@@ -525,7 +525,9 @@ class TryOnPipeline(
             single_image_embeds, single_negative_image_embeds = self.encode_image(ip_adapter_image, device, 1, output_hidden_state)
             if do_classifier_free_guidance:
                 image_embeds = torch.cat([single_negative_image_embeds, single_image_embeds], dim=0)
-                image_embeds.to(device=device)
+            else:
+                image_embeds = single_negative_image_embeds
+            image_embeds.to(device=device)
 
         return image_embeds
 
