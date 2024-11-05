@@ -505,16 +505,25 @@ def main():
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(unet), accelerator.accumulate(image_proj_model):
+                concat_dim = -1
                 # Get inputs for denoising unet (Pixel Space --> Latent Space)
-                latents = vae.encode(batch['image'].to(dtype=weight_dtype)).latent_dist.sample()
-                latents = latents * vae.config.scaling_factor
-                masked_images = vae.encode(batch['masked_image'].to(dtype=weight_dtype)).latent_dist.sample()
-                masked_images = masked_images * vae.config.scaling_factor
+                image_latents = vae.encode(batch['image'].to(dtype=weight_dtype)).latent_dist.sample()
+                image_latents = image_latents * vae.config.scaling_factor
+                masked_image_latents = vae.encode(batch['masked_image'].to(dtype=weight_dtype)).latent_dist.sample()
+                masked_image_latents = masked_image_latents * vae.config.scaling_factor
                 densepose = vae.encode(batch['densepose'].to(dtype=weight_dtype)).latent_dist.sample()
                 densepose = densepose * vae.config.scaling_factor
                 masks = batch['mask'].to(dtype=weight_dtype)
-                masks = F.interpolate(masks, size=(args.height // 8, args.width // 8))
-                
+                masks = F.interpolate(masks, size=(args.height//8, args.width//8))
+
+                cloth_latents = vae.encode(batch['cloth_raw'].to(dtype=weight_dtype)).latent_dist.sample()
+                cloth_latents = cloth_latents * vae.config.scaling_factor
+
+                # Concat in spatial dim (in latent space)
+                masks = torch.cat([masks, torch.zeros_like(masks)], dim=concat_dim)
+                masked_image_latents = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
+                image_latents = torch.cat([image_latents, cloth_latents], dim=concat_dim)
+
                 # Get text condition
                 # we set input text prompts as a list of empty strings
                 # text_prompts = ['']*len(batch['captions'])
@@ -534,20 +543,20 @@ def main():
                 added_cond_kwargs = {'image_embeds': ip_image_embeds}
 
                 # Move to device (e.g, GPUs)
-                latents.to(device, dtype=weight_dtype)
-                masked_images.to(device, dtype=weight_dtype)
+                image_latents.to(device, dtype=weight_dtype)
+                masked_image_latents.to(device, dtype=weight_dtype)
                 densepose.to(device, dtype=weight_dtype)
                 masks.to(device, dtype=weight_dtype)
 
                 # Add Gaussian noise to input for each timestep
                 # this is diffusion forward pass
-                noise = torch.randn_like(latents).to(device, dtype=weight_dtype)
-                bs = latents.shape[0]
+                noise = torch.randn_like(masked_image_latents).to(device, dtype=weight_dtype)
+                bs = image_latents.shape[0]
                 timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bs,), device=device) # DDIM Scheduler
                 timesteps = timesteps.long()
-                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
 
-                unet_input = torch.cat([noisy_latents, masks, masked_images, densepose], dim=1) # concatenate in channel dim
+                unet_input = torch.cat([noisy_latents, masks, masked_image_latents], dim=1) # concatenate in channel dim
                 noise_pred = unet(unet_input, timesteps, encoder_hidden_states, added_cond_kwargs=added_cond_kwargs).sample # Denoising or diffusion backward process
                 loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
 
@@ -605,6 +614,7 @@ def main():
                                         image=batch['image'],
                                         mask_image=batch['mask'],
                                         densepose_image=batch['densepose'],
+                                        cloth_image=batch['cloth_raw'],
                                         # masked_image_latents=batch['masked_image'],
                                         ip_adapter_image=batch['cloth'],
                                         height=args.height,

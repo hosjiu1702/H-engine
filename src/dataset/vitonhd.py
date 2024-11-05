@@ -71,7 +71,12 @@ class VITONHDDataset(Dataset):
         c = Image.open(self.c_paths[index])
         c = self.image_processor(images=c, return_tensors='pt').pixel_values
         c = c.squeeze(0)
-        
+
+        # Cloth (no CLIP preprocessing)
+        c_raw = Image.open(self.c_paths[index])
+        c_raw = c_raw.resize((self.width, self.height))
+        c_raw = self.transform(c_raw)
+
         # Densepose
         dp = Image.open(self.dp_paths[index])
         dp = dp.resize((self.width, self.height))
@@ -98,6 +103,7 @@ class VITONHDDataset(Dataset):
             'masked_image': masked_img,
             'mask': mask,
             'densepose': dp,
+            'cloth_raw': c_raw,
             'cloth': c
         })
 
