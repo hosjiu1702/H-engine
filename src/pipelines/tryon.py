@@ -1211,6 +1211,9 @@ class TryOnPipeline(
 
         cloth_image = self.image_processor.preprocess(cloth_image, height, width)
         cloth_latents = self.vae.encode(cloth_image).latent_dist.sample()
+        cloth_latents = cloth_latents * self.vae.config.scaling_factor
+        cloth_latents = torch.cat([cloth_latents] * 2) if self.do_classifier_free_guidance else cloth_latents
+        cloth_latents.to(device=device, dtype=prompt_embeds.dtype)
 
         concat_dim = -1
         masked_image_latents_concat = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
