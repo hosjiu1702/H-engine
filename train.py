@@ -69,6 +69,11 @@ def parse_args():
         required=False,
     )
     parser.add_argument(
+        '--vae_path',
+        type=str,
+        default='stabilityai/sd-vae-ft-mse'
+    )
+    parser.add_argument(
         '--output_dir',
         type=str,
         default='output',
@@ -290,7 +295,7 @@ def main():
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler')
     tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder='tokenizer')
     text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='text_encoder')
-    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder='vae', torch_dtype=torch.float16) # float16 vs float32 -> which one to choose?
+    vae = AutoencoderKL.from_pretrained(args.vae_path) # float16 vs float32 -> which one to choose?
     image_processor = CLIPImageProcessor()
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path)
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
