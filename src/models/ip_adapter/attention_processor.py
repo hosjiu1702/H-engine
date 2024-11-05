@@ -226,6 +226,6 @@ class IPAttnProcessor2_0(torch.nn.Module):
         # if attn.residual_connection:
         #     hidden_states = hidden_states + residual
 
-        hidden_states = hidden_states / attn.rescale_output_factor
+        # hidden_states = hidden_states / attn.rescale_output_factor
 
         return hidden_states
