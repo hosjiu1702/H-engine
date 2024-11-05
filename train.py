@@ -359,23 +359,23 @@ def main():
     unet.config['encoder_hid_dim_type'] = 'ip_image_proj'
 
     # Update the first convolution layer to works with additional inputs
-    if args.use_densepose:
-        new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image)
-    else:
-        new_in_channels = 9
-    with torch.no_grad():
-        conv_new = torch.nn.Conv2d(
-            in_channels=new_in_channels,
-            out_channels=unet.conv_in.out_channels,
-            kernel_size=3,
-            padding=1,
-        )
-        conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
-        conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
-        conv_new.bias.data = unet.conv_in.bias.data
-        unet.conv_in = conv_new
-        unet.config['in_channels'] = new_in_channels
-        unet.config.in_channels = new_in_channels
+    # if args.use_densepose:
+    #     new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image)
+    # else:
+    #     new_in_channels = 9
+    # with torch.no_grad():
+    #     conv_new = torch.nn.Conv2d(
+    #         in_channels=new_in_channels,
+    #         out_channels=unet.conv_in.out_channels,
+    #         kernel_size=3,
+    #         padding=1,
+    #     )
+    #     conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
+    #     conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
+    #     conv_new.bias.data = unet.conv_in.bias.data
+    #     unet.conv_in = conv_new
+    #     unet.config['in_channels'] = new_in_channels
+    #     unet.config.in_channels = new_in_channels
 
     # Freeze some modules
     set_train(vae, False)
