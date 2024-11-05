@@ -1220,7 +1220,6 @@ class TryOnPipeline(
         mask_concat = torch.cat([mask, torch.zeros_like(mask)], dim=concat_dim)
         latents_concat = randn_tensor(
             shape=masked_image_latents_concat,
-            generator=generator,
             device=device,
             dtype=prompt_embeds.dtype)
         latents_concat = latents_concat * self.scheduler.init_noise_sigma
