@@ -1218,12 +1218,12 @@ class TryOnPipeline(
         concat_dim = -1
         masked_image_latents_concat = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
         mask_concat = torch.cat([mask, torch.zeros_like(mask)], dim=concat_dim)
-        latents_concat = randn_tensor(
+        latents = randn_tensor(
             shape=masked_image_latents_concat.shape,
             generator=generator,
             device=device,
             dtype=prompt_embeds.dtype)
-        latents_concat = latents_concat * self.scheduler.init_noise_sigma
+        latents = latents * self.scheduler.init_noise_sigma
 
         # 8. Check that sizes of mask, masked image and latents match
         # if num_channels_unet == 13:
@@ -1271,11 +1271,11 @@ class TryOnPipeline(
                     continue
 
                 # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents_concat] * 2) if self.do_classifier_free_guidance else latents_concat
+                latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
 
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                latent_model_input = torch.cat([latents_concat, mask_concat, masked_image_latents_concat], dim=1)
+                latent_model_input = torch.cat([latents, mask_concat, masked_image_latents_concat], dim=1)
 
                 # predict the noise residual
                 noise_pred = self.unet(
