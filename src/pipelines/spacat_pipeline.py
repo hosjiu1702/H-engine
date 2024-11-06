@@ -731,7 +731,7 @@ class TryOnPipeline(
         self._interrupt = False
 
         # 2. Define call parameters
-        if isinstance(image, torch.tensor):
+        if isinstance(image, torch.Tensor):
             batch_size = image.shape[0]
 
         if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
