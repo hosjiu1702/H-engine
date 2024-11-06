@@ -559,7 +559,6 @@ class TryOnPipeline(
         masked_image_latents: torch.Tensor = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
-        device=None,
         padding_mask_crop: Optional[int] = None,
         strength: float = 1.0,
         num_inference_steps: int = 50,
@@ -733,6 +732,8 @@ class TryOnPipeline(
         # 2. Define call parameters
         if isinstance(image, torch.Tensor):
             batch_size = image.shape[0]
+
+        device = self._execution_device
 
         if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
             image_embeds = self.prepare_ip_adapter_image_embeds(
