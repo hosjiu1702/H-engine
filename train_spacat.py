@@ -294,64 +294,6 @@ def main():
     vae = AutoencoderKL.from_pretrained(args.vae_path) # float16 vs float32 -> which one to choose?
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
 
-    # Load IP-Adapter for joint training with Denoising U-net.
-    # We load the existing adapter modules from the original U-net
-    # and changes its cross-attention processors from IP-Adapter
-    # attn_procs = dict()
-    # unet_state_dict = unet.state_dict()
-    # for name in unet.attn_processors.keys():
-    #     cross_attention_dim = None if name.endswith('attn1.processor') else unet.config.cross_attention_dim
-    #     if name.startswith('mid_block'):
-    #         hidden_size = unet.config.block_out_channels[-1]
-    #     elif name.startswith('down_blocks'):
-    #         block_id = int(name[len('down_blocks.')])
-    #         hidden_size = unet.config.block_out_channels[block_id]
-    #     elif name.startswith('up_blocks'):
-    #         block_id = int(name[len('up_blocks.')])
-    #         hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
-    #     if cross_attention_dim is None:
-    #         attn_procs[name] = AttnProcessor() # We preverse the attention ops on self-attention layer
-    #     else:
-    #         layer_name_prefix = name.split('.processor')[0]
-    #         weights = {
-    #             'to_k_ip.weight': unet_state_dict[layer_name_prefix + '.to_k.weight'],
-    #             'to_v_ip.weight': unet_state_dict[layer_name_prefix + '.to_v.weight']
-    #         }
-    #         # Assign IP-Adapter-based Attention mechanism
-    #         attn_procs[name] = IPAttnProcessor(
-    #             hidden_size=hidden_size,
-    #             cross_attention_dim=cross_attention_dim,
-    #             num_tokens=args.num_tokens
-    #         )
-    #         attn_procs[name].load_state_dict(weights) # init linear layers of new k, v from the existing ones respectively
-    # unet.set_attn_processor(attn_procs) # Reload unet attn processors with new ones
-
-    # Load Ip-adapter pretrained weights
-    # ip_state_dict = torch.load(args.pretrained_ip_adapter_path, map_location='cpu', weights_only=True)
-    
-    # adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
-    # adapter_modules.load_state_dict(ip_state_dict['ip_adapter'], strict=True) # Load weights from Linear Layers (k, v) of pretrained IP-Adatper
-    
-    # Init projection layer for IP-Adapter
-    # Here we use perceiver from Flamingo paper
-    # image_proj_model = Resampler(
-    #     dim=unet.config.cross_attention_dim,
-    #     depth=args.depth,
-    #     dim_head=args.head_dim,
-    #     heads=args.head_num,
-    #     num_queries=args.num_tokens,
-    #     embedding_dim=image_encoder.config.hidden_size,
-    #     output_dim=unet.config.cross_attention_dim,
-    # )
-    # image_proj_model.load_state_dict(ip_state_dict['image_proj'], strict=True) # Load pretrained weights from pretrained IP-Adpater model
-    
-    # Init image projection layer from outside of the denoising unet
-    # for a better control because we could avoid directly modify the code inside of unet_2d_condition.py
-    # But this will make this training code hard to read and refractor with new training strategy.
-    # unet.encoder_hid_proj = image_proj_model
-    # unet.config.encoder_hid_dim_type = 'ip_image_proj'
-    # unet.config['encoder_hid_dim_type'] = 'ip_image_proj'
-
     # Update the first convolution layer to works with additional inputs
     if args.use_densepose:
         new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image) -- spatial dimension concatenation
@@ -371,12 +313,7 @@ def main():
         unet.config['in_channels'] = new_in_channels
         unet.config.in_channels = new_in_channels
 
-    # Freeze some modules
     set_train(vae, False)
-    set_train(image_encoder, False)
-    # set_train(image_proj_model, False)
-
-    # Trainable modules
     set_train(unet, True)
 
     accelerator.print('\n==== Trainable Params ====')
@@ -402,6 +339,7 @@ def main():
     if args.downscale:
         vars(args)['height'] = args.height // 2
         vars(args)['width'] = args.width // 2
+    
     train_dataset = VITONHDDataset(
         data_rootpath=args.data_dir,
         use_trainset=True,
@@ -505,24 +443,6 @@ def main():
                 masks = torch.cat([masks, torch.zeros_like(masks)], dim=concat_dim)
                 masked_image_latents = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
                 image_latents = torch.cat([image_latents, cloth_latents], dim=concat_dim)
-
-                # Get text condition
-                # we set input text prompts as a list of empty strings
-                # text_prompts = ['']*len(batch['captions'])
-                # dummy_captions = [''] * len(batch['image']) # a dirty fix
-                # text_prompts = dummy_captions
-                # text_ids = tokenizer(
-                #     text_prompts,
-                #     max_length=tokenizer.model_max_length,
-                #     padding='max_length',
-                #     truncation=True,
-                #     return_tensors='pt',
-                # ).input_ids
-                # encoder_hidden_states = text_encoder(text_ids.to(device)).last_hidden_state # use last layer features from CLIP Text Encoder
-
-                # image_embeds = image_encoder(batch['cloth'].to(device, dtype=weight_dtype)).last_hidden_state # use last layer features of CLIP
-                # ip_image_embeds = image_proj_model(image_embeds)
-                # added_cond_kwargs = {'image_embeds': ip_image_embeds}
 
                 # Move to device (e.g, GPUs)
                 image_latents.to(device, dtype=weight_dtype)
