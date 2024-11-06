@@ -890,7 +890,7 @@ class TryOnPipeline(
                 noise_pred = self.unet(
                     latent_model_input,
                     t,
-                    encoder_hidden_states=prompt_embeds,
+                    encoder_hidden_states=None,
                     cross_attention_kwargs=self.cross_attention_kwargs,
                     added_cond_kwargs=added_cond_kwargs,
                     return_dict=False,
