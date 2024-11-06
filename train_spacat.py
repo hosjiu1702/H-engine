@@ -421,6 +421,7 @@ def main():
     )
 
     global_steps = 0
+    rand_name = generate_rand_chars()
     for epoch in range(0, args.num_train_epochs):
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
@@ -489,7 +490,6 @@ def main():
                         # Saves model at a certain training step
                         if global_steps % args.checkpointing_steps == 0:
                             # Just for resuming when we want to continue training from the last state
-                            rand_name = generate_rand_chars()
                             save_path = os.path.join(args.output_dir, rand_name, 'checkpoints', f'ckpt-{global_steps}')
                             os.makedirs(save_path, exist_ok=True)
                             accelerator.save_state(save_path, safe_serialization=False)
@@ -527,14 +527,9 @@ def main():
                                         wandb_tracker.log({
                                             'validation': results
                                         })
-                            # Save (unet + ip-adapter)
-                            # CAUTION: this code snippet below potentially cause
-                            # your hard disk overflow and the training machine crash
-                            # if it is not handled properly!
-                            # unet_path = os.path.join(args.output_dir, rand_name, f'unet-{global_steps}.pt')
-                            # ipadapter_path = os.path.join(args.output_dir, rand_name, f'ipadapter-{global_steps}.pt')
-                            # accelerator.save(unwrapped_unet, unet_path, safe_serialization=False)
-                            # accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
+                            # save pipeline
+                            save_path = os.path.join(args.output_dir, rand_name, f'ckpt-{global_steps}')
+                            pipe.save_pretrained(save_path)
                             del unwrapped_unet
                             del pipe
                             torch.cuda.empty_cache()
