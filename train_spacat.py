@@ -460,7 +460,7 @@ def main():
                 timesteps = timesteps.long()
                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
 
-                unet_input = torch.cat([noisy_latents, masks, masked_image_latents, ], dim=1) # concatenate in channel dim
+                unet_input = torch.cat([noisy_latents, masks, masked_image_latents, densepose_latents], dim=1) # concatenate in channel dim
                 noise_pred = unet(unet_input, timesteps, encoder_hidden_states=None).sample # Denoising or diffusion backward process
                 loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
 
