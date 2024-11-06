@@ -7,6 +7,11 @@ import numpy as np
 import torch
 import accelerate
 
+from src.models.attention_processor import (
+    SkipAttnProcessor,
+    AttnProcessor2_0 as AttnProcessor
+)
+
 
 # Copied from https://github.com/miccunifi/ladi-vton/blob/master/src/utils/set_seeds.py
 def set_seed(seed: int):
@@ -56,3 +61,18 @@ def str2bool(v):
         return False
     else:
         argparse.ArgumentTypeError('boolean value expected.')
+
+
+def init_attn_processor(
+        unet: torch.nn.Module, 
+        cross_attn_cls=SkipAttnProcessor,
+    ):
+    attn_procs = {}
+    for name in unet.attn_processors.keys():
+        cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
+        if cross_attention_dim is None:
+            attn_procs[name] = AttnProcessor()
+        else:
+            attn_procs[name] = cross_attn_cls()
+                                                    
+    unet.set_attn_processor(attn_procs)
