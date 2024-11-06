@@ -34,8 +34,10 @@ from src.utils import (
     total_trainable_params,
     generate_rand_chars,
     str2bool,
+    init_attn_processor,
 )
 from src.models.unet_2d_condition import UNet2DConditionModel
+from src.models.attention_processor import SkipAttnProcessor
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
 
@@ -293,6 +295,8 @@ def main():
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler')
     vae = AutoencoderKL.from_pretrained(args.vae_path) # float16 vs float32 -> which one to choose?
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
+
+    init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
 
     # Update the first convolution layer to works with additional inputs
     if args.use_densepose:
