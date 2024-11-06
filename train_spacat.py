@@ -432,8 +432,8 @@ def main():
                 image_latents = image_latents * vae.config.scaling_factor
                 masked_image_latents = vae.encode(batch['masked_image'].to(dtype=weight_dtype)).latent_dist.sample()
                 masked_image_latents = masked_image_latents * vae.config.scaling_factor
-                densepose = vae.encode(batch['densepose'].to(dtype=weight_dtype)).latent_dist.sample()
-                densepose = densepose * vae.config.scaling_factor
+                densepose_latents = vae.encode(batch['densepose'].to(dtype=weight_dtype)).latent_dist.sample()
+                densepose_latents = densepose_latents * vae.config.scaling_factor
                 masks = batch['mask'].to(dtype=weight_dtype)
                 masks = F.interpolate(masks, size=(args.height//8, args.width//8))
 
@@ -443,12 +443,13 @@ def main():
                 # Concat in spatial dim (in latent space)
                 masks = torch.cat([masks, torch.zeros_like(masks)], dim=concat_dim)
                 masked_image_latents = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
+                densepose_latents = torch.cat([densepose_latents, cloth_latents], dim=concat_dim)
                 image_latents = torch.cat([image_latents, cloth_latents], dim=concat_dim)
 
                 # Move to device (e.g, GPUs)
                 image_latents.to(device, dtype=weight_dtype)
                 masked_image_latents.to(device, dtype=weight_dtype)
-                densepose.to(device, dtype=weight_dtype)
+                densepose_latents.to(device, dtype=weight_dtype)
                 masks.to(device, dtype=weight_dtype)
 
                 # Add Gaussian noise to input for each timestep
@@ -459,7 +460,7 @@ def main():
                 timesteps = timesteps.long()
                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
 
-                unet_input = torch.cat([noisy_latents, masks, masked_image_latents], dim=1) # concatenate in channel dim
+                unet_input = torch.cat([noisy_latents, masks, masked_image_latents, ], dim=1) # concatenate in channel dim
                 noise_pred = unet(unet_input, timesteps, encoder_hidden_states=None).sample # Denoising or diffusion backward process
                 loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
 
