@@ -564,7 +564,7 @@ class TryOnPipeline(
         num_inference_steps: int = 50,
         timesteps: List[int] = None,
         sigmas: List[float] = None,
-        guidance_scale: float = 7.5,
+        guidance_scale: float = 2.5,
         negative_prompt: Optional[Union[str, List[str]]] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
