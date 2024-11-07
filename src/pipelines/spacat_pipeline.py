@@ -841,10 +841,11 @@ class TryOnPipeline(
         if self.do_classifier_free_guidance:
             densepose_latents_concat = torch.cat([densepose_latents_concat] * 2, dim=0)
             mask_concat = torch.cat([mask_concat] * 2, dim=0)
-            masked_image_latents_concat = torch.cat([
-                torch.cat([masked_image_latents, torch.zeros_like(cloth_latents)], dim=concat_dim), # uncond
-                masked_image_latents_concat # cond
-            ])
+            masked_image_latents_concat = torch.cat([masked_image_latents_concat] * 2, dim=0)
+            # masked_image_latents_concat = torch.cat([
+            #     torch.cat([masked_image_latents, torch.zeros_like(cloth_latents)], dim=concat_dim), # uncond
+            #     masked_image_latents_concat # cond
+            # ])
 
         # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
