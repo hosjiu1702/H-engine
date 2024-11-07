@@ -839,6 +839,7 @@ class TryOnPipeline(
         latents = latents * self.scheduler.init_noise_sigma
 
         if self.do_classifier_free_guidance:
+            densepose_latents_concat = torch.cat([densepose_latents_concat] * 2, dim=0)
             mask_concat = torch.cat([mask_concat] * 2, dim=0)
             masked_image_latents_concat = torch.cat([
                 torch.cat([masked_image_latents, torch.zeros_like(cloth_latents)], dim=concat_dim), # uncond
