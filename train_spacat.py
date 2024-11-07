@@ -1,4 +1,8 @@
+# CAT-VTON like training strategy
+#   * We concatenate garment to person in spatial dim
+#
 # Modified or got inspired from:
+#
 # - https://github.com/miccunifi/ladi-vton/blob/master/src/train_vto.py
 # - https://github.com/tencent-ailab/IP-Adapter/blob/main/ip_adapter/attention_processor.py
 # - https://github.com/yisol/IDM-VTON/blob/1b39608bf3b6f075b21562e86302dcefd6989fc5/train_xl.py
@@ -17,7 +21,6 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 from diffusers import DDPMScheduler, AutoencoderKL
 from diffusers.utils import is_wandb_available
-from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModelWithProjection, CLIPImageProcessor
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
 from tqdm import tqdm
@@ -31,14 +34,11 @@ from src.utils import (
     total_trainable_params,
     generate_rand_chars,
     str2bool,
-)
-from src.models.ip_adapter.attention_processor import (
-    AttnProcessor2_0 as AttnProcessor,
-    IPAttnProcessor2_0 as IPAttnProcessor
+    init_attn_processor,
 )
 from src.models.unet_2d_condition import UNet2DConditionModel
-from src.pipelines.tryon import TryOnPipeline
-from src.models.ip_adapter.resampler import Resampler
+from src.models.attention_processor import SkipAttnProcessor
+from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
 
 
@@ -262,6 +262,11 @@ def parse_args():
         action='store_true',
         help='Whether or not use densepose alongside with (mask, agnostic image and original image)'
     )
+    parser.add_argument(
+        '--save',
+        action='store_true',
+        help='Whether or not to save model after each validation step.'
+    )
 
     args = parser.parse_args()
 
@@ -293,105 +298,36 @@ def main():
 
     # Load diffusion-related components
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler')
-    tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder='tokenizer')
-    text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='text_encoder')
     vae = AutoencoderKL.from_pretrained(args.vae_path) # float16 vs float32 -> which one to choose?
-    image_processor = CLIPImageProcessor()
-    image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path)
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
 
-    # Load IP-Adapter for joint training with Denoising U-net.
-    # We load the existing adapter modules from the original U-net
-    # and changes its cross-attention processors from IP-Adapter
-    attn_procs = dict()
-    unet_state_dict = unet.state_dict()
-    for name in unet.attn_processors.keys():
-        cross_attention_dim = None if name.endswith('attn1.processor') else unet.config.cross_attention_dim
-        if name.startswith('mid_block'):
-            hidden_size = unet.config.block_out_channels[-1]
-        elif name.startswith('down_blocks'):
-            block_id = int(name[len('down_blocks.')])
-            hidden_size = unet.config.block_out_channels[block_id]
-        elif name.startswith('up_blocks'):
-            block_id = int(name[len('up_blocks.')])
-            hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
-        if cross_attention_dim is None:
-            attn_procs[name] = AttnProcessor() # We preverse the attention ops on self-attention layer
-        else:
-            layer_name_prefix = name.split('.processor')[0]
-            weights = {
-                'to_k_ip.weight': unet_state_dict[layer_name_prefix + '.to_k.weight'],
-                'to_v_ip.weight': unet_state_dict[layer_name_prefix + '.to_v.weight']
-            }
-            # Assign IP-Adapter-based Attention mechanism
-            attn_procs[name] = IPAttnProcessor(
-                hidden_size=hidden_size,
-                cross_attention_dim=cross_attention_dim,
-                num_tokens=args.num_tokens
-            )
-            attn_procs[name].load_state_dict(weights) # init linear layers of new k, v from the existing ones respectively
-    unet.set_attn_processor(attn_procs) # Reload unet attn processors with new ones
-
-    # Load Ip-adapter pretrained weights
-    ip_state_dict = torch.load(args.pretrained_ip_adapter_path, map_location='cpu', weights_only=True)
-    
-    adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
-    adapter_modules.load_state_dict(ip_state_dict['ip_adapter'], strict=True) # Load weights from Linear Layers (k, v) of pretrained IP-Adatper
-    
-    # Init projection layer for IP-Adapter
-    # Here we use perceiver from Flamingo paper
-    image_proj_model = Resampler(
-        dim=unet.config.cross_attention_dim,
-        depth=args.depth,
-        dim_head=args.head_dim,
-        heads=args.head_num,
-        num_queries=args.num_tokens,
-        embedding_dim=image_encoder.config.hidden_size,
-        output_dim=unet.config.cross_attention_dim,
-    )
-    image_proj_model.load_state_dict(ip_state_dict['image_proj'], strict=True) # Load pretrained weights from pretrained IP-Adpater model
-    
-    # Init image projection layer from outside of the denoising unet
-    # for a better control because we could avoid directly modify the code inside of unet_2d_condition.py
-    # But this will make this training code hard to read and refractor with new training strategy.
-    unet.encoder_hid_proj = image_proj_model
-    unet.config.encoder_hid_dim_type = 'ip_image_proj'
-    unet.config['encoder_hid_dim_type'] = 'ip_image_proj'
+    init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
 
     # Update the first convolution layer to works with additional inputs
-    # if args.use_densepose:
-    #     new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image)
-    # else:
-    #     new_in_channels = 9
-    # with torch.no_grad():
-    #     conv_new = torch.nn.Conv2d(
-    #         in_channels=new_in_channels,
-    #         out_channels=unet.conv_in.out_channels,
-    #         kernel_size=3,
-    #         padding=1,
-    #     )
-    #     conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
-    #     conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
-    #     conv_new.bias.data = unet.conv_in.bias.data
-    #     unet.conv_in = conv_new
-    #     unet.config['in_channels'] = new_in_channels
-    #     unet.config.in_channels = new_in_channels
+    if args.use_densepose:
+        new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image) -- spatial dimension concatenation
+    else:
+        new_in_channels = 9
+    with torch.no_grad():
+        conv_new = torch.nn.Conv2d(
+            in_channels=new_in_channels,
+            out_channels=unet.conv_in.out_channels,
+            kernel_size=3,
+            padding=1,
+        )
+        conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
+        conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
+        conv_new.bias.data = unet.conv_in.bias.data
+        unet.conv_in = conv_new
+        unet.config['in_channels'] = new_in_channels
+        unet.config.in_channels = new_in_channels
 
-    # Freeze some modules
     set_train(vae, False)
-    set_train(text_encoder, False)
-    set_train(image_encoder, False)
-
-    # Trainable modules
-    set_train(unet, True)
-    set_train(image_proj_model, True)
+    set_train(unet, True) # train full unet
 
     accelerator.print('\n==== Trainable Params ====')
     accelerator.print(f'VAE: {total_trainable_params(vae)}')
-    accelerator.print(f'Text Encoder: {total_trainable_params(text_encoder)}')
-    accelerator.print(f'Image Encoder (CLIP): {total_trainable_params(image_encoder)}')
-    accelerator.print(f'UNet: {total_trainable_params(unet) - total_trainable_params(unet.encoder_hid_proj)}')
-    accelerator.print(f'Image Projection Model (Perceiver Resampler): {total_trainable_params(image_proj_model)}')
+    accelerator.print(f'UNet: {total_trainable_params(unet)}')
     accelerator.print('==== Trainable Params ====\n')
 
     # Enable TF32 for faster training on Ampere GPUs (and later)
@@ -412,6 +348,7 @@ def main():
     if args.downscale:
         vars(args)['height'] = args.height // 2
         vars(args)['width'] = args.width // 2
+    
     train_dataset = VITONHDDataset(
         data_rootpath=args.data_dir,
         use_trainset=True,
@@ -444,8 +381,6 @@ def main():
     # cast all non-trainable weights to half-precision
     # as these weights are only used for inference, keeping weights in full precision is not required
     vae.to(device, dtype=weight_dtype)
-    text_encoder.to(device, dtype=weight_dtype)
-    image_encoder.to(device, dtype=weight_dtype)
 
     # hey Huggingface team, why do you want to need to override this poor variable (overrode...)
     overrode_max_train_steps = False
@@ -460,13 +395,7 @@ def main():
     # * Device Placement
     # * Gradient Synchronization
     # * what else?
-    unet, image_proj_model, image_encoder, optimizer, train_dataloader = accelerator.prepare(
-        unet,
-        image_proj_model,
-        image_encoder,
-        optimizer,
-        train_dataloader,
-    )
+    unet, optimizer, train_dataloader = accelerator.prepare(unet, optimizer, train_dataloader,)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     # (actually I don't know why this could happen :|)
@@ -501,18 +430,19 @@ def main():
     )
 
     global_steps = 0
+    rand_name = generate_rand_chars()
     for epoch in range(0, args.num_train_epochs):
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
-            with accelerator.accumulate(unet), accelerator.accumulate(image_proj_model):
+            with accelerator.accumulate(unet):
                 concat_dim = -1
                 # Get inputs for denoising unet (Pixel Space --> Latent Space)
                 image_latents = vae.encode(batch['image'].to(dtype=weight_dtype)).latent_dist.sample()
                 image_latents = image_latents * vae.config.scaling_factor
                 masked_image_latents = vae.encode(batch['masked_image'].to(dtype=weight_dtype)).latent_dist.sample()
                 masked_image_latents = masked_image_latents * vae.config.scaling_factor
-                densepose = vae.encode(batch['densepose'].to(dtype=weight_dtype)).latent_dist.sample()
-                densepose = densepose * vae.config.scaling_factor
+                densepose_latents = vae.encode(batch['densepose'].to(dtype=weight_dtype)).latent_dist.sample()
+                densepose_latents = densepose_latents * vae.config.scaling_factor
                 masks = batch['mask'].to(dtype=weight_dtype)
                 masks = F.interpolate(masks, size=(args.height//8, args.width//8))
 
@@ -522,30 +452,13 @@ def main():
                 # Concat in spatial dim (in latent space)
                 masks = torch.cat([masks, torch.zeros_like(masks)], dim=concat_dim)
                 masked_image_latents = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
+                densepose_latents = torch.cat([densepose_latents, cloth_latents], dim=concat_dim)
                 image_latents = torch.cat([image_latents, cloth_latents], dim=concat_dim)
-
-                # Get text condition
-                # we set input text prompts as a list of empty strings
-                # text_prompts = ['']*len(batch['captions'])
-                dummy_captions = [''] * len(batch['image']) # a dirty fix
-                text_prompts = dummy_captions
-                text_ids = tokenizer(
-                    text_prompts,
-                    max_length=tokenizer.model_max_length,
-                    padding='max_length',
-                    truncation=True,
-                    return_tensors='pt',
-                ).input_ids
-                encoder_hidden_states = text_encoder(text_ids.to(device)).last_hidden_state # use last layer features from CLIP Text Encoder
-
-                image_embeds = image_encoder(batch['cloth'].to(device, dtype=weight_dtype)).last_hidden_state # use last layer features of CLIP
-                ip_image_embeds = image_proj_model(image_embeds)
-                added_cond_kwargs = {'image_embeds': ip_image_embeds}
 
                 # Move to device (e.g, GPUs)
                 image_latents.to(device, dtype=weight_dtype)
                 masked_image_latents.to(device, dtype=weight_dtype)
-                densepose.to(device, dtype=weight_dtype)
+                densepose_latents.to(device, dtype=weight_dtype)
                 masks.to(device, dtype=weight_dtype)
 
                 # Add Gaussian noise to input for each timestep
@@ -556,8 +469,8 @@ def main():
                 timesteps = timesteps.long()
                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
 
-                unet_input = torch.cat([noisy_latents, masks, masked_image_latents], dim=1) # concatenate in channel dim
-                noise_pred = unet(unet_input, timesteps, encoder_hidden_states, added_cond_kwargs=added_cond_kwargs).sample # Denoising or diffusion backward process
+                unet_input = torch.cat([noisy_latents, masks, masked_image_latents, densepose_latents], dim=1) # concatenate in channel dim
+                noise_pred = unet(unet_input, timesteps, encoder_hidden_states=None).sample # Denoising or diffusion backward process
                 loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
 
                 # For logging purpose, you need to gather losses across
@@ -587,7 +500,6 @@ def main():
                         # Saves model at a certain training step
                         if global_steps % args.checkpointing_steps == 0:
                             # Just for resuming when we want to continue training from the last state
-                            rand_name = generate_rand_chars()
                             save_path = os.path.join(args.output_dir, rand_name, 'checkpoints', f'ckpt-{global_steps}')
                             os.makedirs(save_path, exist_ok=True)
                             accelerator.save_state(save_path, safe_serialization=False)
@@ -595,28 +507,20 @@ def main():
                         # Generate to do test or validation (some kinds of sanity check)
                         if global_steps % args.validation_steps == 0:
                             unwrapped_unet = accelerator.unwrap_model(unet)
-                            unwrapped_ipadapter = accelerator.unwrap_model(image_proj_model)
                             with torch.no_grad():
                                 pipe = TryOnPipeline(
                                     vae=vae,
-                                    text_encoder=text_encoder,
-                                    tokenizer=tokenizer,
                                     unet=unwrapped_unet,
                                     scheduler=noise_scheduler,
-                                    feature_extractor=image_processor, # CLIP Image Processor
-                                    image_encoder=image_encoder # CLIP Vision Encoder
                                 ).to(device)
                                 # allows to run in mixed precision mode
                                 # not using in backward pass
                                 with torch.amp.autocast(device.type):
                                     images = pipe(
-                                        prompt=text_prompts,
                                         image=batch['image'],
                                         mask_image=batch['mask'],
                                         densepose_image=batch['densepose'],
                                         cloth_image=batch['cloth_raw'],
-                                        # masked_image_latents=batch['masked_image'],
-                                        ip_adapter_image=batch['cloth'],
                                         height=args.height,
                                         width=args.width,
                                     ).images # pil
@@ -633,16 +537,11 @@ def main():
                                         wandb_tracker.log({
                                             'validation': results
                                         })
-                            # Save (unet + ip-adapter)
-                            # CAUTION: this code snippet below potentially cause
-                            # your hard disk overflow and the training machine crash
-                            # if it is not handled properly!
-                            # unet_path = os.path.join(args.output_dir, rand_name, f'unet-{global_steps}.pt')
-                            # ipadapter_path = os.path.join(args.output_dir, rand_name, f'ipadapter-{global_steps}.pt')
-                            # accelerator.save(unwrapped_unet, unet_path, safe_serialization=False)
-                            # accelerator.save(unwrapped_ipadapter, ipadapter_path, safe_serialization=False)
+                            # save full pipeline
+                            if args.save:
+                                save_path = os.path.join(args.output_dir, rand_name, f'ckpt-{global_steps}')
+                                pipe.save_pretrained(save_path)
                             del unwrapped_unet
-                            del unwrapped_ipadapter
                             del pipe
                             torch.cuda.empty_cache()
                 logs = {'step_loss': loss.detach().item()}
