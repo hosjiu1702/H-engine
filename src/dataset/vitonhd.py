@@ -62,6 +62,8 @@ class VITONHDDataset(Dataset):
     def __getitem__(self, index):
         item = {}
 
+        img_name = str(self.im_paths[index]).split('/')[-1]
+        
         # Person image
         img = Image.open(self.im_paths[index])
         origin_img = img = img.resize((self.width, self.height))
@@ -104,7 +106,8 @@ class VITONHDDataset(Dataset):
             'mask': mask,
             'densepose': dp,
             'cloth_raw': c_raw,
-            'cloth': c
+            'cloth': c,
+            'im_name': img_name
         })
 
         return item
