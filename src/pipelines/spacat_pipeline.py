@@ -435,7 +435,7 @@ class TryOnPipeline(
         return image_latents
 
     def prepare_mask_latents(
-        self, mask, masked_image, batch_size, height, width, dtype, device, generator, do_classifier_free_guidance
+        self, mask, masked_image, batch_size, height, width, dtype, device, generator,
     ):
         # resize the mask to latents shape as we concatenate the mask to the latents
         # we do that before converting to dtype to avoid breaking in case we're using cpu_offload
@@ -469,11 +469,6 @@ class TryOnPipeline(
                     " Make sure the number of images that you pass is divisible by the total requested batch size."
                 )
             masked_image_latents = masked_image_latents.repeat(batch_size // masked_image_latents.shape[0], 1, 1, 1)
-
-        mask = torch.cat([mask] * 2) if do_classifier_free_guidance else mask
-        masked_image_latents = (
-            torch.cat([masked_image_latents] * 2) if do_classifier_free_guidance else masked_image_latents
-        )
 
         # aligning device to prevent device errors when concating it with the latent model input
         masked_image_latents = masked_image_latents.to(device=device, dtype=dtype)
@@ -535,7 +530,8 @@ class TryOnPipeline(
     # corresponds to doing no classifier free guidance.
     @property
     def do_classifier_free_guidance(self):
-        return self._guidance_scale > 1 and self.unet.config.time_cond_proj_dim is None
+        # return self._guidance_scale > 1 and self.unet.config.time_cond_proj_dim is None
+        return self._guidance_scale > 1
 
     @property
     def cross_attention_kwargs(self):
@@ -565,15 +561,10 @@ class TryOnPipeline(
         timesteps: List[int] = None,
         sigmas: List[float] = None,
         guidance_scale: float = 2.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.Tensor] = None,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
-        ip_adapter_image: Optional[PipelineImageInput] = None,
-        ip_adapter_image_embeds: Optional[List[torch.Tensor]] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
@@ -718,8 +709,6 @@ class TryOnPipeline(
             strength,
             callback_steps,
             output_type,
-            ip_adapter_image,
-            ip_adapter_image_embeds,
             callback_on_step_end_tensor_inputs,
             padding_mask_crop,
         )
@@ -734,16 +723,6 @@ class TryOnPipeline(
             batch_size = image.shape[0]
 
         device = self._execution_device
-
-        if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
-            image_embeds = self.prepare_ip_adapter_image_embeds(
-                ip_adapter_image,
-                ip_adapter_image_embeds,
-                device,
-                batch_size * num_images_per_prompt,
-                self.do_classifier_free_guidance,
-            )
-            image_embeds = self.unet.encoder_hid_proj(image_embeds).to(dtype=prompt_embeds.dtype) # Perceiver Resampler
 
         # 4. set timesteps
         timesteps, num_inference_steps = retrieve_timesteps(
@@ -835,25 +814,23 @@ class TryOnPipeline(
             self.weight_dtype,
             device,
             generator,
-            self.do_classifier_free_guidance,
         )
 
         densepose_image = self.image_processor.preprocess(densepose_image, height, width)
         densepose_latents = self.vae.encode(densepose_image).latent_dist.sample(generator=generator)
         densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is interested thing to understand :)
-        densepose_latents = torch.cat([densepose_latents] * 2) if self.do_classifier_free_guidance else densepose_latents
         densepose_latents.to(device=device, dtype=self.weight_dtype)
 
         cloth_image = self.image_processor.preprocess(cloth_image, height, width)
         cloth_latents = self.vae.encode(cloth_image).latent_dist.sample()
         cloth_latents = cloth_latents * self.vae.config.scaling_factor
-        cloth_latents = torch.cat([cloth_latents] * 2) if self.do_classifier_free_guidance else cloth_latents
         cloth_latents.to(device=device, dtype=self.weight_dtype)
 
         concat_dim = -1
         masked_image_latents_concat = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
         densepose_latents_concat = torch.cat([densepose_latents, cloth_latents], dim=concat_dim)
         mask_concat = torch.cat([mask, torch.zeros_like(mask)], dim=concat_dim)
+
         latents = randn_tensor(
             shape=masked_image_latents_concat.shape,
             generator=generator,
@@ -861,15 +838,15 @@ class TryOnPipeline(
             dtype=self.weight_dtype)
         latents = latents * self.scheduler.init_noise_sigma
 
+        if self.do_classifier_free_guidance:
+            mask_concat = torch.cat([mask_concat] * 2, dim=0)
+            masked_image_latents_concat = torch.cat([
+                torch.cat([masked_image_latents, torch.zeros_like(cloth_latents)], dim=concat_dim), # uncond
+                masked_image_latents_concat # cond
+            ])
+
         # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 9.1 Add image embeds for IP-Adapter
-        added_cond_kwargs = (
-            {"image_embeds": image_embeds}
-            if ip_adapter_image is not None or ip_adapter_image_embeds is not None
-            else None
-        )
 
         # 10. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -892,7 +869,6 @@ class TryOnPipeline(
                     t,
                     encoder_hidden_states=None,
                     cross_attention_kwargs=self.cross_attention_kwargs,
-                    added_cond_kwargs=added_cond_kwargs,
                     return_dict=False,
                 )[0]
 
