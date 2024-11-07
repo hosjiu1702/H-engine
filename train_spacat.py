@@ -262,6 +262,11 @@ def parse_args():
         action='store_true',
         help='Whether or not use densepose alongside with (mask, agnostic image and original image)'
     )
+    parser.add_argument(
+        '--save',
+        action='store_true',
+        help='Whether or not to save model after each validation step.'
+    )
 
     args = parser.parse_args()
 
@@ -318,7 +323,7 @@ def main():
         unet.config.in_channels = new_in_channels
 
     set_train(vae, False)
-    set_train(unet, True)
+    set_train(unet, True) # train full unet
 
     accelerator.print('\n==== Trainable Params ====')
     accelerator.print(f'VAE: {total_trainable_params(vae)}')
@@ -532,9 +537,10 @@ def main():
                                         wandb_tracker.log({
                                             'validation': results
                                         })
-                            # save pipeline
-                            save_path = os.path.join(args.output_dir, rand_name, f'ckpt-{global_steps}')
-                            pipe.save_pretrained(save_path)
+                            # save full pipeline
+                            if args.save:
+                                save_path = os.path.join(args.output_dir, rand_name, f'ckpt-{global_steps}')
+                                pipe.save_pretrained(save_path)
                             del unwrapped_unet
                             del pipe
                             torch.cuda.empty_cache()
