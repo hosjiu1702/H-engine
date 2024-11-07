@@ -524,16 +524,21 @@ def main():
                                         height=args.height,
                                         width=args.width,
                                     ).images # pil
+                                    img_path = os.path.join(args.output_dir, rand_name, 'images')
+                                    os.makedirs(img_path, exist_ok=True)
                                     if args.report_to == 'wandb' and str2bool(args.use_tracker):
                                         wandb_tracker = accelerator.get_tracker('wandb')
                                         # concate generated image and original image for comparison
                                         results = []
-                                        for img, origin_img in zip(images, batch['original_image']):
+                                        for img, origin_img, im_name in zip(images, batch['original_image'], batch['im_name']):
+                                            index = im_name.split('.')[0]
                                             origin_img = to_pil_image(origin_img)
                                             output_img = Image.new('RGB', (img.width * 2, img.height))
                                             output_img.paste(img, (0, 0))
                                             output_img.paste(origin_img, (img.width, 0))
-                                            results.append(wandb.Image(output_img))
+                                            results.append(wandb.Image(output_img, caption=f'index: {index}'))
+                                            # save every generated images in the training batch into disk
+                                            img.save(os.path.join(img_path, im_name))
                                         wandb_tracker.log({
                                             'validation': results
                                         })
