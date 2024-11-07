@@ -10,7 +10,7 @@
 
 ## TODO LIST
 - [x] training code *(still under active development)*
-- [x] pipeline code *(in progress)*
+- [x] pipeline code *(still under active development)*
 - [ ] inference code
 - [ ] evaluation
 - [ ] legacy code (old pipeline)
@@ -25,25 +25,34 @@ vto-engine
 |   setup.py
 |   train.py
 |   ...
-|___assets
-|___checkpoints
-|___datasets # put your dataset here for training
-|___experiment # for experiments that not directly relate to the core source
-|___gradio_demo # for gradio demo
-|___legacy # this aim to reproduce the old vto pipeline for comparison with new models
-|___notebooks
-|___scripts # convention scripts
-|___src
-|   |___dataset
-|   |___models # core models (new vto models are implemented here)
-|   |___pipelines # have no use for now
-|   |___utils
-|   |___preprocess # compute mask, human segmentation,...
+|___assets/
+|___checkpoints/
+|___datasets/ # put your dataset here for training
+|   |___vitonhd/
+|___experiment/ # for experiments that not directly relate to the core source
+|___gradio_demo/ # for gradio demo
+|___legacy/ # this aim to reproduce the old vto pipeline for comparison with new models
+|___notebooks/
+|___scripts/ # convention scripts
+|   |___train_single_gpu.sh
+|   |___train_cpu_only.sh
+|   ...
+|___models/
+|   |___attention_processor.py
+|   |___unet_2d_condition.py
+|   ...
+|   
+|___src/
+    |___dataset/
+    |___models/ # core models (new vto models are implemented here)
+    |___pipelines/ # have no use for now
+    |___utils/
+    |___preprocess/ # compute mask, human segmentation,...
 ```
 
 ## Installation
 #### 1. Prerequistes
-- Python >= 3.8 (only tested 3.8)
+- Python >= 3.8 *(tested on Python 3.8, 3.9)*
 - Pytorch 2.4.1
 - Diffusers 0.30.3
 
