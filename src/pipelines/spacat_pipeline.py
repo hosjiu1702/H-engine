@@ -906,14 +906,13 @@ class TryOnPipeline(
                 latents / self.vae.config.scaling_factor,
                 return_dict=False,
                 generator=generator,
-
             )[0]
         else:
             raise ValueError('We just support Pillow Image for now.')
             # image = latents
 
         image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=None)
-        
+        image = [im.crop((0, 0, im.width // 2, im.height)) for im in image]
 
         if padding_mask_crop is not None:
             image = [self.image_processor.apply_overlay(mask_image, original_image, i, crops_coords) for i in image]
