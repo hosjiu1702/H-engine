@@ -909,9 +909,11 @@ class TryOnPipeline(
 
             )[0]
         else:
-            image = latents
+            raise ValueError('We just support Pillow Image for now.')
+            # image = latents
 
         image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=None)
+        
 
         if padding_mask_crop is not None:
             image = [self.image_processor.apply_overlay(mask_image, original_image, i, crops_coords) for i in image]

@@ -37,7 +37,7 @@ from src.models.ip_adapter.attention_processor import (
     IPAttnProcessor2_0 as IPAttnProcessor
 )
 from src.models.unet_2d_condition import UNet2DConditionModel
-from src.pipelines.tryon import TryOnPipeline
+from src.pipelines.ip_unet_pipeline import TryOnPipeline
 from src.models.ip_adapter.resampler import Resampler
 from src.dataset.vitonhd import VITONHDDataset
 
