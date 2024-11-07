@@ -16,6 +16,20 @@
 - [ ] legacy code (old pipeline)
 - [ ] Gradio demo
 
+## VTO Models
+We have two approaches to train our model:
+1. Train with strong image encoders to extract garment features and inject it into cross-attention or self-attention of denoising (try-on) U-net.
+2. Train using only self-attention from U-net input.
+### Inside Components
+#### Base U-net
+Two options:
+- `Stable Diffusion 1.5 inpainting`
+- `Paint-by-Example`
+#### VAE
+Because the original pretrained `vae` from Stability AI is not good to preserve human face so we currently choose an [another variant one](https://huggingface.co/stabilityai/sd-vae-ft-mse).
+#### IP-Adapter
+For the image prompt approach we use IP-Adapter ([a perceiver resampler w/ 16 tokens](https://huggingface.co/h94/IP-Adapter/blob/main/models/ip-adapter-plus_sd15.bin)) as main research direction. For the main idea, they use a pretrained image encoder like CLIP and use it to extract information from garment and inject its extracted features to U-net via Decoupled Cross-Attention. In addition, they also adapt a lightweight network called Perceiver Resampler, which is a simple transformer, to better extract original CLIP features.
+
 ## Project Structure
 ```
 vto-engine
