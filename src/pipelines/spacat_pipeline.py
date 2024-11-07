@@ -861,7 +861,7 @@ class TryOnPipeline(
 
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                latent_model_input = torch.cat([latents, mask_concat, masked_image_latents_concat, densepose_latents_concat], dim=1)
+                latent_model_input = torch.cat([latent_model_input, mask_concat, masked_image_latents_concat, densepose_latents_concat], dim=1)
 
                 # predict the noise residual
                 noise_pred = self.unet(
