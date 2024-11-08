@@ -1,11 +1,16 @@
+from typing import Union
 import argparse
 import random
 import string
 import os
 from pathlib import Path
 import numpy as np
+import PIL
 import torch
 import accelerate
+from torchvision.transforms.functional import pil_to_tensor
+from einops import rearrange
+from matplotlib import pyplot as plt
 
 from src.models.attention_processor import (
     SkipAttnProcessor,
@@ -25,6 +30,21 @@ def set_seed(seed: int):
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     accelerate.utils.set_seed(seed)
+
+
+def show(img: Union[torch.Tensor, PIL.Image.Image], print_shape: bool = False):
+    if isinstance(img, PIL.Image.Image):
+        img = pil_to_tensor(img)
+
+    if img.ndim == 3:
+        img = rearrange(img, 'c h w -> h w c')
+    else:
+        raise ValueError('Only support for RGB image for now or Tensor 3D.')
+
+    if print_shape:
+        print(img.shape)
+
+    plt.imshow(img)
 
 
 def set_train(module: torch.nn.Module, is_train: bool = True):

@@ -47,14 +47,21 @@ class VITONHDDataset(Dataset):
         def _get_file_paths(root_dir: Union[Path, Text]) -> List[Path]:
             return [Path(root_dir, fname) for fname in os.listdir(root_dir)]
 
-        if self.use_paired_data:
+        if mode == 'train':
+            if self.use_paired_data:
+                self.im_paths = _get_file_paths(Path(datapath, 'image')) # person image
+                self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
+                self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
+                self.c_paths = _get_file_paths(Path(datapath, 'cloth')) # outfit image
+                self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose')) # densepose image
+            else:
+                raise ValueError('Not support unpaired setting for VITON-HD dataset yet.')
+        else:
             self.im_paths = _get_file_paths(Path(datapath, 'image')) # person image
             self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
             self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
             self.c_paths = _get_file_paths(Path(datapath, 'cloth')) # outfit image
             self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose')) # densepose image
-        else:
-            raise ValueError('Not support unpaired setting for VITON-HD dataset yet.')
 
     def __len__(self):
         return len(self.im_paths)
