@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader, Subset
 from diffusers import DDPMScheduler, AutoencoderKL
 from diffusers.utils import is_wandb_available
 from accelerate import Accelerator
-from accelerate.utils import ProjectConfiguration
+from accelerate.utils import ProjectConfiguration, DistributedDataParallelKwargs
 from tqdm import tqdm
 from torchvision.transforms.functional import to_pil_image
 from PIL import Image
@@ -288,7 +288,8 @@ def main():
                 mixed_precision=args.mixed_precision,
                 log_with=args.report_to,
                 gradient_accumulation_steps=args.gradient_accumulation_steps,
-                project_config=project_config
+                project_config=project_config,
+                kwargs_handlers=[DistributedDataParallelKwargs(find_unused_parameters=True)]
             )
     device = accelerator.device
 
