@@ -32,7 +32,7 @@ def set_seed(seed: int):
     accelerate.utils.set_seed(seed)
 
 
-def show(img: Union[torch.Tensor, PIL.Image.Image], print_shape: bool = False):
+def show(img: Union[torch.Tensor, PIL.Image.Image], print_shape: bool = False, title: str = ""):
     if isinstance(img, PIL.Image.Image):
         img = pil_to_tensor(img)
 
@@ -44,6 +44,7 @@ def show(img: Union[torch.Tensor, PIL.Image.Image], print_shape: bool = False):
     if print_shape:
         print(img.shape)
 
+    plt.title(title)
     plt.imshow(img)
 
 
