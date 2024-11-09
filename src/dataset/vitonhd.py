@@ -70,6 +70,9 @@ class VITONHDDataset(Dataset):
         item = {}
 
         img_name = str(self.im_paths[index]).split('/')[-1]
+        origin_m = str(self.m_paths[index]).split('/')[-1]
+        origin_agn = str(self.agn_paths[index]).split('/')[-1]
+        origin_dp = str(self.dp_paths[index]).split('/')[-1]
         
         # Person image
         img = Image.open(self.im_paths[index])
@@ -108,6 +111,9 @@ class VITONHDDataset(Dataset):
 
         item.update({
             'original_image': self.totensor(origin_img),
+            'original_mask': self.totensor(origin_m),
+            'original_agnostic': self.totensor(origin_agn),
+            'original_densepose': self.totensor(origin_dp),
             'image': img,
             'masked_image': masked_img,
             'mask': mask,
