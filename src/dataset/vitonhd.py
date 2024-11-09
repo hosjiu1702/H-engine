@@ -108,6 +108,7 @@ class VITONHDDataset(Dataset):
 
         item.update({
             'original_image': self.totensor(origin_img),
+            'original_image_path': os.path.join(self.im_paths[index]),
             'original_mask': self.totensor(origin_m),
             'original_masked_image': self.totensor(origin_agn),
             'original_densepose': self.totensor(origin_dp),
