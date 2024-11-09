@@ -70,9 +70,6 @@ class VITONHDDataset(Dataset):
         item = {}
 
         img_name = str(self.im_paths[index]).split('/')[-1]
-        origin_m = str(self.m_paths[index]).split('/')[-1]
-        origin_agn = str(self.agn_paths[index]).split('/')[-1]
-        origin_dp = str(self.dp_paths[index]).split('/')[-1]
         
         # Person image
         img = Image.open(self.im_paths[index])
@@ -91,13 +88,13 @@ class VITONHDDataset(Dataset):
 
         # Densepose
         dp = Image.open(self.dp_paths[index])
-        dp = dp.resize((self.width, self.height))
+        origin_dp = dp.resize((self.width, self.height))
         dp = self.transform(dp)
 
         # Mask
-        mask = Image.open(self.m_paths[index]).convert('L')
-        mask = mask.resize((self.width, self.height))
-        mask = self.totensor(mask)
+        mask = Image.open(self.m_paths[index])
+        origin_m = mask = mask.resize((self.width, self.height))
+        mask = self.totensor(mask.convert('L'))
         # A dirty snippet code that check if this is a binary matrix
         # uni_elems = mask.unique()
         # assert 1. in uni_elems
@@ -106,13 +103,13 @@ class VITONHDDataset(Dataset):
 
         # Masked image (agnostic image)
         masked_img = Image.open(self.agn_paths[index])
-        masked_img = masked_img.resize((self.width, self.height))
+        origin_agn = masked_img = masked_img.resize((self.width, self.height))
         masked_img = self.transform(masked_img)
 
         item.update({
             'original_image': self.totensor(origin_img),
             'original_mask': self.totensor(origin_m),
-            'original_agnostic': self.totensor(origin_agn),
+            'original_masked_image': self.totensor(origin_agn),
             'original_densepose': self.totensor(origin_dp),
             'image': img,
             'masked_image': masked_img,
