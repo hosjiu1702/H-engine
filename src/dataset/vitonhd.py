@@ -113,7 +113,7 @@ class VITONHDDataset(Dataset):
             'original_mask_path': str(self.m_paths[index]),
             'original_masked_image': self.totensor(origin_agn),
             'original_densepose': self.totensor(origin_dp),
-            'original_cloth_path': str(self.c_paths[index])
+            'original_cloth_path': str(self.c_paths[index]),
             'image': img,
             'masked_image': masked_img,
             'mask': mask,
