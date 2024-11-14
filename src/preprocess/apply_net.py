@@ -15,7 +15,7 @@ from src.preprocess.detectron2.detectron2.engine.defaults import DefaultPredicto
 from src.preprocess.detectron2.detectron2.structures.instances import Instances
 from src.preprocess.detectron2.detectron2.utils.logger import setup_logger
 
-from src.preprocess.detectron2.projects.DensePose import add_densepose_config
+from src.preprocess.detectron2.projects.DensePose.densepose import add_densepose_config
 from src.preprocess.detectron2.projects.DensePose.densepose.structures import DensePoseChartPredictorOutput, DensePoseEmbeddingPredictorOutput
 from src.preprocess.detectron2.projects.DensePose.densepose.utils.logger import verbosity_to_level
 from src.preprocess.detectron2.projects.DensePose.densepose.vis.base import CompoundVisualizer
