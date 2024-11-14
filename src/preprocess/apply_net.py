@@ -11,7 +11,7 @@ import torch
 import PIL
 
 from detectron2.config import CfgNode, get_cfg
-from detectron2.data.detection_utils import read_image
+from detectron2.data.detection_utils import read_image, _apply_exif_orientation, convert_PIL_to_numpy
 from detectron2.engine.defaults import DefaultPredictor
 from detectron2.structures.instances import Instances
 from detectron2.utils.logger import setup_logger
@@ -100,6 +100,8 @@ class InferenceAction(Action):
         #     return
         # for file_name in file_list:
         # img = read_image(file_name, format="BGR")  # predictor expects BGR image.
+        image = _apply_exif_orientation(image)
+        image = convert_PIL_to_numpy(image)
         context = cls.create_context(args, cfg)
         with torch.no_grad():
             outputs = predictor(image)["instances"]
