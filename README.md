@@ -66,7 +66,7 @@ vto-engine
 
 ## Installation
 #### 1. Prerequistes
-- Python >= 3.8 *(tested on Python 3.8, 3.9)*
+- Python >= 3.8 *(tested on Python 3.8)*
 - Pytorch 2.4.1
 - Diffusers 0.30.3
 
