@@ -9,33 +9,33 @@ import sys
 from typing import Any, ClassVar, Dict, List
 import torch
 
-from src.preprocess.detectron2.detectron2.config import CfgNode, get_cfg
-from src.preprocess.detectron2.detectron2.data.detection_utils import read_image
-from src.preprocess.detectron2.detectron2.engine.defaults import DefaultPredictor
-from src.preprocess.detectron2.detectron2.structures.instances import Instances
-from src.preprocess.detectron2.detectron2.utils.logger import setup_logger
+from detectron2.config import CfgNode, get_cfg
+from detectron2.data.detection_utils import read_image
+from detectron2.engine.defaults import DefaultPredictor
+from detectron2.structures.instances import Instances
+from detectron2.utils.logger import setup_logger
 
-from src.preprocess.detectron2.projects.DensePose.densepose import add_densepose_config
-from src.preprocess.detectron2.projects.DensePose.densepose.structures import DensePoseChartPredictorOutput, DensePoseEmbeddingPredictorOutput
-from src.preprocess.detectron2.projects.DensePose.densepose.utils.logger import verbosity_to_level
-from src.preprocess.detectron2.projects.DensePose.densepose.vis.base import CompoundVisualizer
-from src.preprocess.detectron2.projects.DensePose.densepose.vis.bounding_box import ScoredBoundingBoxVisualizer
-from src.preprocess.detectron2.projects.DensePose.densepose.vis.densepose_outputs_vertex import (
+from densepose import add_densepose_config
+from densepose.structures import DensePoseChartPredictorOutput, DensePoseEmbeddingPredictorOutput
+from densepose.utils.logger import verbosity_to_level
+from densepose.vis.base import CompoundVisualizer
+from densepose.vis.bounding_box import ScoredBoundingBoxVisualizer
+from densepose.vis.densepose_outputs_vertex import (
     DensePoseOutputsTextureVisualizer,
     DensePoseOutputsVertexVisualizer,
     get_texture_atlases,
 )
-from src.preprocess.detectron2.projects.DensePose.densepose.vis.densepose_results import (
+from densepose.vis.densepose_results import (
     DensePoseResultsContourVisualizer,
     DensePoseResultsFineSegmentationVisualizer,
     DensePoseResultsUVisualizer,
     DensePoseResultsVVisualizer,
 )
-from src.preprocess.detectron2.projects.DensePose.densepose.vis.densepose_results_textures import (
+from densepose.vis.densepose_results_textures import (
     DensePoseResultsVisualizerWithTexture,
     get_texture_atlas,
 )
-from src.preprocess.detectron2.projects.DensePose.densepose.vis.extractor import (
+from densepose.vis.extractor import (
     CompoundExtractor,
     DensePoseOutputsExtractor,
     DensePoseResultExtractor,
