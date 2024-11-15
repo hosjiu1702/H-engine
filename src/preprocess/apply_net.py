@@ -8,7 +8,7 @@ import os
 import sys
 from typing import Any, ClassVar, Dict, List
 import torch
-import PIL
+from PIL import Image
 
 from detectron2.config import CfgNode, get_cfg
 from detectron2.data.detection_utils import read_image, _apply_exif_orientation, convert_PIL_to_numpy
@@ -87,27 +87,20 @@ class InferenceAction(Action):
         )
 
     @classmethod
-    def execute(cls: type, args: argparse.Namespace, image: PIL.Image.Image):
+    def execute(cls: type, args: argparse.Namespace, image):
         logger.info(f"Loading config from {args.cfg}")
         opts = []
         cfg = cls.setup_config(args.cfg, args.model, args, opts)
         logger.info(f"Loading model from {args.model}")
         predictor = DefaultPredictor(cfg)
-        # logger.info(f"Loading data from {args.input}")
-        # file_list = cls._get_input_file_list(args.input)
-        # if len(file_list) == 0:
-        #     logger.warning(f"No input images for {args.input}")
-        #     return
-        # for file_name in file_list:
-        # img = read_image(file_name, format="BGR")  # predictor expects BGR image.
         image = _apply_exif_orientation(image)
-        image = convert_PIL_to_numpy(image)
+        image = convert_PIL_to_numpy(image, format='BGR')
         context = cls.create_context(args, cfg)
         with torch.no_grad():
             outputs = predictor(image)["instances"]
-            densepose = cls.execute_on_outputs(context, {"image": image}, outputs)
+            densepose, matrix_vis, mask_bg, mask = cls.execute_on_outputs(context, {"image": image}, outputs)
         cls.postexecute(context)
-        return densepose
+        return densepose, outputs, matrix_vis, mask_bg, mask
 
     @classmethod
     def setup_config(
@@ -279,22 +272,14 @@ class ShowAction(InferenceAction):
         import numpy as np
 
         visualizer = context["visualizer"]
+        # visualizer.visualizers[0].mask_visualizer.alpha = 1.0
+        # visualizer.visualizers[0].mask_visualizer.inplace = True
         extractor = context["extractor"]
-        image_fpath = entry["file_name"]
-        logger.info(f"Processing {image_fpath}")
         image = cv2.cvtColor(entry["image"], cv2.COLOR_BGR2GRAY)
         image = np.tile(image[:, :, np.newaxis], [1, 1, 3])
         data = extractor(outputs)
-        image_vis = visualizer.visualize(image, data)
-        entry_idx = context["entry_idx"] + 1
-        out_fname = cls._get_out_fname(entry_idx, context["out_fname"])
-        out_dir = os.path.dirname(out_fname)
-        if len(out_dir) > 0 and not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        cv2.imwrite(out_fname, image_vis)
-        logger.info(f"Output saved to {out_fname}")
-        context["entry_idx"] += 1
-        return image_vis
+        image_vis, matrix_vis, mask_bg, mask = visualizer.visualize(image, data)
+        return image_vis, matrix_vis, mask_bg, mask
 
     @classmethod
     def postexecute(cls: type, context: Dict[str, Any]):
