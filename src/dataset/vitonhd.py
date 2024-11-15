@@ -128,6 +128,6 @@ class VITONHDDataset(Dataset):
 
     @classmethod
     def preprocess(cls, img: Image.Image, width: int, height: int) -> torch.Tensor:
-        x = img.resize(width, height)
+        x = img.resize((width, height))
         x = cls.transform(x)
         return x
