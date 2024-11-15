@@ -6,7 +6,7 @@
 
 ---
 > [!WARNING]
-> This codebase is highly developed so the everything could be broken accidently.
+> This codebase is highly developed so everything could be broken accidently.
 
 ## TODO LIST
 - [x] training code *(still under active development)*
