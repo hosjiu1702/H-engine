@@ -10,6 +10,14 @@ from transformers import CLIPImageProcessor
 
 class VITONHDDataset(Dataset):
 
+    transform = v2.Compose(
+        [
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+        ]
+    )
+
     def __init__(
             self,
             data_rootpath: Text,
@@ -30,13 +38,6 @@ class VITONHDDataset(Dataset):
         self.use_CLIPVision = use_CLIPVision
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
-        self.transform = v2.Compose(
-            [
-                v2.ToImage(),
-                v2.ToDtype(torch.float32, scale=True),
-                v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-            ]
-        )
 
         if use_CLIPVision:
             self.image_processor = CLIPImageProcessor()
@@ -124,3 +125,9 @@ class VITONHDDataset(Dataset):
         })
 
         return item
+
+    @classmethod
+    def preprocess(cls, img: Image.Image, width: int, height: int) -> torch.Tensor:
+        x = img.resize(width, height)
+        x = cls.transform(x)
+        return x
