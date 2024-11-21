@@ -826,6 +826,7 @@ class TryOnPipeline(
         cloth_latents = cloth_latents * self.vae.config.scaling_factor
         cloth_latents.to(device=device, dtype=self.weight_dtype)
 
+        # Spatial Dimension Concatenation
         concat_dim = -1
         masked_image_latents_concat = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
         densepose_latents_concat = torch.cat([densepose_latents, cloth_latents], dim=concat_dim)
@@ -839,13 +840,17 @@ class TryOnPipeline(
         latents = latents * self.scheduler.init_noise_sigma
 
         if self.do_classifier_free_guidance:
-            densepose_latents_concat = torch.cat([densepose_latents_concat] * 2, dim=0)
+            # densepose_latents_concat = torch.cat([densepose_latents_concat] * 2, dim=0)
+            densepose_latents_concat = torch.cat([
+                torch.cat([densepose_latents, torch.zeros_like(cloth_latents)], dim=concat_dim),
+                densepose_latents_concat
+            ])
             mask_concat = torch.cat([mask_concat] * 2, dim=0)
-            masked_image_latents_concat = torch.cat([masked_image_latents_concat] * 2, dim=0)
-            # masked_image_latents_concat = torch.cat([
-            #     torch.cat([masked_image_latents, torch.zeros_like(cloth_latents)], dim=concat_dim), # uncond
-            #     masked_image_latents_concat # cond
-            # ])
+            # masked_image_latents_concat = torch.cat([masked_image_latents_concat] * 2, dim=0)
+            masked_image_latents_concat = torch.cat([
+                torch.cat([masked_image_latents, torch.zeros_like(cloth_latents)], dim=concat_dim), # uncond
+                masked_image_latents_concat # cond
+            ])
 
         # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
