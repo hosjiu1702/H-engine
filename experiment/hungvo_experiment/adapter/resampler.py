@@ -1,6 +1,6 @@
-# modified from https://github.com/mlfoundations/open_flamingo/blob/main/open_flamingo/src/helpers.py
-# and https://github.com/lucidrains/imagen-pytorch/blob/main/imagen_pytorch/imagen_pytorch.py
-
+# -*- coding: utf-8 -*-
+# @Time    : 2024/5/13
+# @Author  : White Jiang
 import math
 
 import torch
@@ -34,7 +34,7 @@ def reshape_tensor(x, heads):
 class PerceiverAttention(nn.Module):
     def __init__(self, *, dim, dim_head=64, heads=8):
         super().__init__()
-        self.scale = dim_head**-0.5
+        self.scale = dim_head ** -0.5
         self.dim_head = dim_head
         self.heads = heads
         inner_dim = dim_head * heads
@@ -63,7 +63,7 @@ class PerceiverAttention(nn.Module):
         kv_input = torch.cat((x, latents), dim=-2)
         k, v = self.to_kv(kv_input).chunk(2, dim=-1)
 
-        q = reshape_tensor(q, self.heads)
+        q = reshape_tensor(q, self.heads)  # [b, h, n, c]
         k = reshape_tensor(k, self.heads)
         v = reshape_tensor(v, self.heads)
 
@@ -71,11 +71,100 @@ class PerceiverAttention(nn.Module):
         scale = 1 / math.sqrt(math.sqrt(self.dim_head))
         weight = (q * scale) @ (k * scale).transpose(-2, -1)  # More stable with f16 than dividing afterwards
         weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
-        out = weight @ v
+        out = weight @ v  # [b, h, n, n] @ [b, h, n, c] = [b, h, n, c]
 
         out = out.permute(0, 2, 1, 3).reshape(b, l, -1)
 
         return self.to_out(out)
+
+
+class PerceiverResampler(nn.Module):
+    def __init__(
+            self,
+            *,
+            dim=1024,
+            depth=8,
+            dim_head=64,
+            heads=16,
+            num_latents=8,
+            embedding_dim=768,
+            output_dim=1024,
+            ff_mult=4,
+    ):
+        super().__init__()
+
+        self.latents = nn.Parameter(torch.randn(1, num_latents, dim) / dim ** 0.5)
+
+        self.proj_in = nn.Linear(embedding_dim, dim)
+
+        self.proj_out = nn.Linear(dim, output_dim)
+        self.norm_out = nn.LayerNorm(output_dim)
+
+        self.layers = nn.ModuleList([])
+        for _ in range(depth):
+            self.layers.append(
+                nn.ModuleList(
+                    [
+                        PerceiverAttention(dim=dim, dim_head=dim_head, heads=heads),
+                        FeedForward(dim=dim, mult=ff_mult),
+                    ]
+                )
+            )
+
+    def forward(self, x):
+
+        latents = self.latents.repeat(x.size(0), 1, 1)
+
+        x = self.proj_in(x)
+
+        for attn, ff in self.layers:
+            latents = attn(x, latents) + latents
+            latents = ff(latents) + latents
+
+        latents = self.proj_out(latents)
+        return self.norm_out(latents)
+
+
+class FacePerceiverResampler(nn.Module):
+    def __init__(
+            self,
+            *,
+            dim=768,
+            depth=4,
+            dim_head=64,
+            heads=16,
+            embedding_dim=1280,
+            output_dim=768,
+            ff_mult=4,
+    ):
+        super().__init__()
+
+        self.proj_in = nn.Linear(embedding_dim, dim)
+
+        self.proj_out = nn.Linear(dim, output_dim)
+        self.norm_out = nn.LayerNorm(output_dim)
+
+        self.layers = nn.ModuleList([])
+        for _ in range(depth):
+            self.layers.append(
+                nn.ModuleList(
+                    [
+                        PerceiverAttention(dim=dim, dim_head=dim_head, heads=heads),
+                        FeedForward(dim=dim, mult=ff_mult),
+                    ]
+                )
+            )
+
+    def forward(self, latents, x):
+
+        x = self.proj_in(x)
+
+        for attn, ff in self.layers:
+            latents = attn(x, latents) + latents
+            latents = ff(latents) + latents
+
+        latents = self.proj_out(latents)
+        return self.norm_out(latents)
 
 
 class Resampler(nn.Module):
@@ -156,3 +245,58 @@ def masked_mean(t, *, dim, mask=None):
     masked_t = t.masked_fill(~mask, 0.0)
 
     return masked_t.sum(dim=dim) / denom.clamp(min=1e-5)
+
+
+class ProjPlusModel(torch.nn.Module):
+    def __init__(self, cross_attention_dim=768, id_embeddings_dim=512, clip_embeddings_dim=1280, num_tokens=4):
+        super().__init__()
+
+        self.cross_attention_dim = cross_attention_dim
+        self.num_tokens = num_tokens
+
+        self.proj = torch.nn.Sequential(
+            torch.nn.Linear(id_embeddings_dim, id_embeddings_dim * 2),
+            torch.nn.GELU(),
+            torch.nn.Linear(id_embeddings_dim * 2, cross_attention_dim * num_tokens),
+        )
+        self.norm = torch.nn.LayerNorm(cross_attention_dim)
+
+        self.perceiver_resampler = FacePerceiverResampler(
+            dim=cross_attention_dim,
+            depth=4,
+            dim_head=64,
+            heads=cross_attention_dim // 64,
+            embedding_dim=clip_embeddings_dim,
+            output_dim=cross_attention_dim,
+            ff_mult=4,
+        )
+
+    def forward(self, id_embeds, clip_embeds, shortcut=False, scale=1.0):
+        x = self.proj(id_embeds)
+        x = x.reshape(-1, self.num_tokens, self.cross_attention_dim)
+        x = self.norm(x)
+        out = self.perceiver_resampler(x, clip_embeds)
+        if shortcut:
+            out = x + scale * out
+        return out
+
+
+if __name__ == "__main__":
+    model = PerceiverResampler(
+        dim=1024,
+        depth=8,
+        dim_head=64,
+        heads=16,
+        num_latents=8,
+        embedding_dim=4096,
+        output_dim=1024,
+        ff_mult=4,
+    )
+
+    x = torch.rand(2, 77, 4096)
+
+    with torch.no_grad():
+        out = model(x)
+        print(out.shape)
+
+    print(sum([p.numel() for p in model.parameters()]) / 1e6)
