@@ -7,18 +7,19 @@ This experiment contains two cases:
 ## Download Resources 
 
 ### IP Adapter  
-Download the IP adapter using the following command:  
+Download the dataset using the following command:  
 ```bash
-cd /path/to/your/folder
-wget [link]
+wget https://drive.google.com/drive/u/3/folders/1Vv--aWuDvz7Nd6TaXrZjRmqJ7VoKD41m
 ```
 
 ### IP Adapter  
 Download the IP adapter using the following command:  
 ```bash
-cd /path/to/your/folder
-wget [link]
+cd adapter
+wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.bin
 ```
+
+
 
 ## Training code
 1. Sd1.5 inpainting: 
