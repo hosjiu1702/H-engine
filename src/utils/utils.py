@@ -1,21 +1,25 @@
-from typing import Union
+from typing import Union, List
 import argparse
 import random
 import string
 import os
 from pathlib import Path
 import numpy as np
+from tqdm import tqdm
 import PIL
 import torch
 import accelerate
+import torchvision
 from torchvision.transforms.functional import pil_to_tensor
 from einops import rearrange
 from matplotlib import pyplot as plt
+from diffusers import AutoencoderKL
 
 from src.models.attention_processor import (
     SkipAttnProcessor,
     AttnProcessor2_0 as AttnProcessor
 )
+from src.models.emasc import EMASC
 
 
 # Copied from https://github.com/miccunifi/ladi-vton/blob/master/src/utils/set_seeds.py
@@ -97,3 +101,58 @@ def init_attn_processor(
             attn_procs[name] = cross_attn_cls()
                                                     
     unet.set_attn_processor(attn_procs)
+
+
+def mask_features(features: list, mask: torch.Tensor):
+    """
+    Mask features with the given mask. (EMASC from LaDI-VTON paper)
+    """
+
+    for i, feature in enumerate(features):
+        # Resize the mask to the feature size.
+        mask = torch.nn.functional.interpolate(mask, size=feature.shape[-2:])
+
+        # Mask the feature.
+        features[i] = feature * (1 - mask)
+
+    return features
+
+
+@torch.inference_mode()
+def extract_save_vae_images(vae: AutoencoderKL, emasc: EMASC, test_dataloader: torch.utils.data.DataLoader,
+                            int_layers: List[int], output_dir: str, order: str, save_name: str,
+                            emasc_type: str) -> None:
+    """
+    Extract and save image using only VAE or VAE + EMASC
+    """
+    # Create output directory
+    save_path = os.path.join(output_dir, f"{save_name}_{order}")
+    os.makedirs(save_path, exist_ok=True)
+
+    for idx, batch in enumerate(tqdm(test_dataloader)):
+        category = batch["category"]
+
+        if emasc_type != "none":
+            # Extract intermediate features from 'im_mask' and encode image
+            posterior_im, _ = vae.encode(batch["image"])
+            _, intermediate_features = vae.encode(batch["im_mask"])
+            intermediate_features = [intermediate_features[i] for i in int_layers]
+
+            # Use EMASC
+            processed_intermediate_features = emasc(intermediate_features)
+
+            processed_intermediate_features = mask_features(processed_intermediate_features, batch["inpaint_mask"])
+            latents = posterior_im.latent_dist.sample()
+            generated_images = vae.decode(latents, processed_intermediate_features, int_layers).sample
+        else:
+            # Encode and decode image without EMASC
+            posterior_im = vae.encode(batch["image"])
+            latents = posterior_im.latent_dist.sample()
+            generated_images = vae.decode(latents).sample
+
+        # Save images
+        for gen_image, cat, name in zip(generated_images, category, batch["im_name"]):
+            gen_image = (gen_image + 1) / 2  # [-1, 1] -> [0, 1]
+            if not os.path.exists(os.path.join(save_path, cat)):
+                os.makedirs(os.path.join(save_path, cat))
+            torchvision.utils.save_image(gen_image, os.path.join(save_path, cat, name), quality=95)
