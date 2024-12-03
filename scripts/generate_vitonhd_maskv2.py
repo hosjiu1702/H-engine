@@ -1,7 +1,7 @@
 import os
 import argparse
 from PIL import Image
-from tqdm import trange
+from tqdm import trange, tqdm
 from src.utils.mask_v2 import Maskerv2
 from src.utils import get_project_root
 
@@ -28,12 +28,12 @@ def main():
 
     masker = Maskerv2()
 
-    for _, path in trange(image_path.items()):
+    for _, path in tqdm(image_path.items()):
         img_path = os.path.join(path, 'image')
         mask_path = os.path.join(path, 'agnostic-mask-v2')
         os.makedirs(mask_path, exist_ok=True)
-        for fname in trange(os.listdir(img_path), ascii=True,
-                            desc='Image Samples:', dynamic_ncols=True):
+        for fname in tqdm(os.listdir(img_path), ascii=True,
+                            desc='Image Samples', dynamic_ncols=True):
             fpath = os.path.join(img_path, fname)
             img = Image.open(fpath)
             mask = masker.create_mask(img)
