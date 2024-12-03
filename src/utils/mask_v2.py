@@ -3,7 +3,7 @@ import PIL
 import numpy as np
 import cv2 as cv
 from src.preprocess.humanparsing import Parsing
-from src.preprocess.humanparsing import OpenPose
+from src.preprocess.openpose import OpenPose
 from src.utils.mask import get_mask_location
 
 
