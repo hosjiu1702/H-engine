@@ -19,6 +19,11 @@ def main():
         required=True,
         help='Path to the VITON-HD dataset.'
     )
+    parser.add_argument(
+        '--output_dir',
+        type=str,
+        default='agnostic-mask-v2'
+    )
     args = parser.parse_args()
     dataset_path = os.path.join(PROJECT_ROOT_PATH, args.vitonhd_path)
     image_path = {
@@ -30,7 +35,7 @@ def main():
 
     for mode, path in tqdm(image_path.items()):
         img_path = os.path.join(path, 'image')
-        mask_path = os.path.join(path, 'agnostic-mask-v2')
+        mask_path = os.path.join(path, args.output_dir)
         os.makedirs(mask_path, exist_ok=True)
         for fname in tqdm(os.listdir(img_path), desc=mode):
             fpath = os.path.join(img_path, fname)
