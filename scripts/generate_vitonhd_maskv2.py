@@ -1,7 +1,7 @@
 import os
 import argparse
 from PIL import Image
-from tqdm import trange, tqdm
+from tqdm.auto import trange, tqdm
 from src.utils.mask_v2 import Maskerv2
 from src.utils import get_project_root
 
