@@ -32,7 +32,7 @@ class Maskerv2:
             height=img.size[1]
         )
         mask_np = np.array(_mask)
-        contours, _ = cv.findContours(mask_np, cv.RERT_TREE, cv.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv.findContours(mask_np, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
         x, y, w, h = cv.boundingRect(contours[0])
         mask = cv.rectangle(np.zeros_like(mask_np), (x, y), (x + w, y + h), (255, 255, 255), cv.FILLED)
         redundant_part = np.logical_and(mask, head_mask)
