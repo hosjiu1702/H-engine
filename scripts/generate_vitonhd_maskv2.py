@@ -46,7 +46,6 @@ def main():
             img = Image.open(fpath)
             # mask
             mask = masker.create_mask(img)
-            mask.save(os.path.join(mask_path, fname), quality=100, subsampling=0)
             # masked image
             mask_np = np.array(mask)
             mask_np = np.stack([mask_np] * 3)
@@ -54,6 +53,8 @@ def main():
             img_np = np.array(img)
             masked_img_np = np.where(mask_np, np.ones_like(mask_np) * 127, img_np)
             masked_img = Image.fromarray(masked_img_np)
+
+            mask.save(os.path.join(mask_path, fname), quality=100, subsampling=0)
             masked_img.save(os.path.join(masked_img_path, fname), quality=100, subsampling=0)
 
 
