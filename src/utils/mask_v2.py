@@ -15,7 +15,7 @@ class Maskerv2:
         self.parser = Parsing(gpu_id)
         self.openpose = OpenPose(gpu_id)
     
-    def create_mask(self, img: PIL.image.image, category: Text = 'upper_body'):
+    def create_mask(self, img: PIL.Image.image, category: Text = 'upper_body'):
         keypoints = self.openpose(img)
         body_parse = self.parser(img)
         _mask, _, _, head_mask  = get_mask_location(
