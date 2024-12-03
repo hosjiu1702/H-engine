@@ -32,8 +32,7 @@ def main():
         img_path = os.path.join(path, 'image')
         mask_path = os.path.join(path, 'agnostic-mask-v2')
         os.makedirs(mask_path, exist_ok=True)
-        for fname in tqdm(os.listdir(img_path), ascii=True, position=0, leave=True,
-                            desc=f'{mode}', dynamic_ncols=True):
+        for fname in tqdm(os.listdir(img_path)):
             fpath = os.path.join(img_path, fname)
             img = Image.open(fpath)
             mask = masker.create_mask(img)
