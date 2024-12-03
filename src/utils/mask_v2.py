@@ -1,5 +1,6 @@
-from typing import Text
+from typing import Text, Union
 import PIL
+from PIL import Image
 import numpy as np
 import cv2 as cv
 from src.preprocess.humanparsing import Parsing
@@ -15,7 +16,11 @@ class Maskerv2:
         self.parser = Parsing(gpu_id)
         self.openpose = OpenPose(gpu_id)
     
-    def create_mask(self, img: PIL.Image.Image, category: Text = 'upper_body'):
+    def create_mask(
+            self, img: PIL.Image.Image,
+            category: Text = 'upper_body',
+            return_img: bool = True
+    ) -> Union[np.ndarray, PIL.Image.Image]:
         keypoints = self.openpose(img)
         body_parse = self.parser(img)
         _mask, _, _, head_mask  = get_mask_location(
@@ -32,5 +37,8 @@ class Maskerv2:
         mask = cv.rectangle(np.zeros_like(mask_np), (x, y), (x + w, y + h), (255, 255, 255), cv.FILLED)
         redundant_part = np.logical_and(mask, head_mask)
         mask = np.where(redundant_part, mask * 0, mask)
+
+        if return_img:
+            return Image.fromarray(mask)
 
         return mask
