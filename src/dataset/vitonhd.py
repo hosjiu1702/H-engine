@@ -27,6 +27,7 @@ class VITONHDDataset(Dataset):
             height: int = 1024,
             width: int = 768,
             use_CLIPVision: bool = True,
+            use_dilated_relaxed_mask: bool = False,
     ):
         super(VITONHDDataset, self).__init__()
         self.data_rootpath = data_rootpath
@@ -36,6 +37,7 @@ class VITONHDDataset(Dataset):
         self.height = height
         self.width = width
         self.use_CLIPVision = use_CLIPVision
+        self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
 
@@ -51,16 +53,24 @@ class VITONHDDataset(Dataset):
         if mode == 'train':
             if self.use_paired_data:
                 self.im_paths = _get_file_paths(Path(datapath, 'image')) # person image
-                self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
-                self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
+                if self.use_dilated_relaxed_mask:
+                    self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask-v2'))
+                    self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v2'))
+                else:
+                    self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
+                    self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
                 self.c_paths = _get_file_paths(Path(datapath, 'cloth')) # outfit image
                 self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose')) # densepose image
             else:
                 raise ValueError('Not support unpaired setting for VITON-HD dataset yet.')
         else:
             self.im_paths = _get_file_paths(Path(datapath, 'image')) # person image
-            self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
-            self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
+            if self.use_dilated_relaxed_mask:
+                self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask-v2'))
+                self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v2'))
+            else:
+                self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
+                self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
             self.c_paths = _get_file_paths(Path(datapath, 'cloth')) # outfit image
             self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose')) # densepose image
 

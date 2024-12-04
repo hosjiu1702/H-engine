@@ -12,7 +12,11 @@ wandb==0.18.5
 wandb[media]==0.18.5
 ipywidgets==8.1.5
 opencv-python==4.10.0.84
-onnxruntime==1.19.2
+flatbuffers
+packaging
+protobuf
+sympy
+onnxruntime-gpu==1.19.2 --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-11/pypi/simple/
 scipy==1.10.1
 scikit-image==0.21.0
 git+https://github.com/XPixelGroup/BasicSR.git
