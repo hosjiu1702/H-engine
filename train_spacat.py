@@ -270,6 +270,7 @@ def parse_args():
     parser.add_argument(
         '--use_dilated_mask',
         action='store_true',
+        help='Whether or not to use Dilated-relaxed Mask in section 3.3 in FitDit paper'
     )
 
     args = parser.parse_args()
