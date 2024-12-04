@@ -99,7 +99,7 @@ class VITONHDDataset(Dataset):
 
         # Densepose
         dp = Image.open(self.dp_paths[index])
-        origin_dp = dp.resize((self.width, self.height))
+        origin_dp = dp = dp.resize((self.width, self.height))
         dp = self.transform(dp)
 
         # Mask
