@@ -267,6 +267,11 @@ def parse_args():
         action='store_true',
         help='Whether or not to save model after each validation step.'
     )
+    parser.add_argument(
+        '--use_dilated_mask',
+        action='store_true',
+        help='Whether or not to use Dilated-relaxed Mask in section 3.3 in FitDit paper'
+    )
 
     args = parser.parse_args()
 
@@ -358,6 +363,7 @@ def main():
         height=args.height,
         width=args.width,
         use_CLIPVision=True,
+        use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
     )
 
     if args.use_subset:
