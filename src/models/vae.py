@@ -140,7 +140,7 @@ class Encoder(nn.Module):
     def forward(self, sample: torch.Tensor) -> torch.Tensor:
         r"""The forward method of the `Encoder` class."""
         intermediate_features = []
-
+        intermediate_features.append(sample)
         sample = self.conv_in(sample)
 
         intermediate_features.append(sample)
