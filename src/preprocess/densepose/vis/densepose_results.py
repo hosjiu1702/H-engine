@@ -31,6 +31,7 @@ class DensePoseResultsVisualizer:
             ).type(torch.uint8)
             self.visualize_iuv_arr(context, iuv_array.cpu().numpy(), boxes_xywh[i])
         image_bgr = self.context_to_image_bgr(context)
+        from Ipython.core.debugger import Pdb; Pdb().set_trace()
         return image_bgr
 
     def create_visualization_context(self, image_bgr: Image):
