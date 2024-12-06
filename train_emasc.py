@@ -214,7 +214,7 @@ def main():
     vae.eval()
 
     # Define EMASC model.
-    in_feature_channels = [128, 128, 128, 256, 512]
+    in_feature_channels = [128, 128, 256, 256, 512]
     out_feature_channels = [128, 256, 512, 512, 512]
     int_layers = [1, 2, 3, 4, 5]
 
