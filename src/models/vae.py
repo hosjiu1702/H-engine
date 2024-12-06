@@ -299,8 +299,6 @@ class Decoder(nn.Module):
 
         sample = self.conv_in(sample)
 
-        intermediate_features.reverse()
-
         upscale_dtype = next(iter(self.up_blocks.parameters())).dtype
         if self.training and self.gradient_checkpointing:
 
@@ -340,8 +338,10 @@ class Decoder(nn.Module):
                     sample = torch.utils.checkpoint.checkpoint(create_custom_forward(up_block), sample, latent_embeds)
         else:
             if intermediate_features:
+                intermediate_features.reverse()
                 # middle
                 sample = self.mid_block(sample, latent_embeds)
+                sample += intermediate_features.pop(0)
                 sample = sample.to(upscale_dtype)
 
                 # up
@@ -364,9 +364,6 @@ class Decoder(nn.Module):
             sample = self.conv_norm_out(sample, latent_embeds)
 
         sample = self.conv_act(sample)
-        
-        if intermediate_features:
-            sample += intermediate_features[-1]
 
         sample = self.conv_out(sample)
 
