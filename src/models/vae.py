@@ -140,9 +140,9 @@ class Encoder(nn.Module):
     def forward(self, sample: torch.Tensor) -> torch.Tensor:
         r"""The forward method of the `Encoder` class."""
         intermediate_features = []
-        intermediate_features.append(sample)
+
         sample = self.conv_in(sample)
-        
+        intermediate_features.append(sample)
         if self.gradient_checkpointing:
             raise ValueError('Do not support Gradient Checkpointing due to emasc training yet.')
 
@@ -173,12 +173,11 @@ class Encoder(nn.Module):
         else:
             # down
             for down_block in self.down_blocks:
-                sample = down_block(sample)
                 intermediate_features.append(sample)
-
+                sample = down_block(sample)
             # middle
             sample = self.mid_block(sample)
-            intermediate_features.append(sample)
+
         # post-process
         sample = self.conv_norm_out(sample)
         sample = self.conv_act(sample)
@@ -339,13 +338,15 @@ class Decoder(nn.Module):
                 intermediate_features.reverse()
                 # middle
                 sample = self.mid_block(sample, latent_embeds)
-                sample += intermediate_features.pop(0)
+                # sample += intermediate_features.pop(0)
+                # print(sample.shape)
                 sample = sample.to(upscale_dtype)
 
                 # up
                 for up_block, int_feats in zip(self.up_blocks, intermediate_features):
-                    sample = up_block(sample, latent_embeds)
+                    print(f'{sample.shape}\t{int_feats.shape}')
                     sample += int_feats
+                    sample = up_block(sample, latent_embeds)
             else:
                 # middle
                 sample = self.mid_block(sample, latent_embeds)
@@ -363,7 +364,9 @@ class Decoder(nn.Module):
             sample = self.conv_norm_out(sample, latent_embeds)
         # 2. Activation Layer
         sample = self.conv_act(sample)
-
+        print(f'{sample.shape}\t{intermediate_features[-1].shape}')
+        sample += intermediate_features[-1]
+        
         sample = self.conv_out(sample)
 
         return sample
