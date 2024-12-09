@@ -140,10 +140,8 @@ class Encoder(nn.Module):
     def forward(self, sample: torch.Tensor) -> torch.Tensor:
         r"""The forward method of the `Encoder` class."""
         intermediate_features = []
-        intermediate_features.append(sample) # add original sample [0]
+        intermediate_features.append(sample)
         sample = self.conv_in(sample)
-
-        intermediate_features.append(sample) # after conv_in [1]
         
         if self.gradient_checkpointing:
             raise ValueError('Do not support Gradient Checkpointing due to emasc training yet.')
@@ -176,11 +174,11 @@ class Encoder(nn.Module):
             # down
             for down_block in self.down_blocks:
                 sample = down_block(sample)
-                intermediate_features.append(sample) # after down block [2, 3, 4, 5]
+                intermediate_features.append(sample)
 
             # middle
             sample = self.mid_block(sample)
-
+            intermediate_features.append(sample)
         # post-process
         sample = self.conv_norm_out(sample)
         sample = self.conv_act(sample)
@@ -341,12 +339,13 @@ class Decoder(nn.Module):
                 intermediate_features.reverse()
                 # middle
                 sample = self.mid_block(sample, latent_embeds)
+                sample += intermediate_features.pop(0)
                 sample = sample.to(upscale_dtype)
 
                 # up
                 for up_block, int_feats in zip(self.up_blocks, intermediate_features):
                     sample = up_block(sample, latent_embeds)
-                    sample += int_feats # [0, 1, 2, 3]
+                    sample += int_feats
             else:
                 # middle
                 sample = self.mid_block(sample, latent_embeds)
@@ -364,8 +363,6 @@ class Decoder(nn.Module):
             sample = self.conv_norm_out(sample, latent_embeds)
         # 2. Activation Layer
         sample = self.conv_act(sample)
-
-        sample += intermediate_features[-1]
 
         sample = self.conv_out(sample)
 
