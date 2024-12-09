@@ -1,11 +1,11 @@
-torch==2.4.1+cu118 --index-url https://download.pytorch.org/whl/torch_stable.html
+torch==2.4.1+cu118
 numpy==1.24.4
 diffusers==0.30.3
 transformers==4.45.2
 accelerate==1.0.1
 einops==0.8.0
 requests==2.32.3
-torchvision==0.19.1+cu118 --index-url https://download.pytorch.org/whl/torch_stable.html
+torchvision==0.19.1+cu118
 ipykernel==6.29.5
 matplotlib==3.7.5
 wandb==0.18.5
