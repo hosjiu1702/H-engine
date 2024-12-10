@@ -136,14 +136,18 @@ def extract_save_vae_images(vae: AutoencoderKL, emasc: EMASC, test_dataloader: t
             # Extract intermediate features from 'im_mask' and encode image
             posterior_im, _ = vae.encode(batch["image"])
             _, intermediate_features = vae.encode(batch["im_mask"])
-            intermediate_features = [intermediate_features[i] for i in int_layers]
+            # intermediate_features = [intermediate_features[i] for i in int_layers]
 
             # Use EMASC
             processed_intermediate_features = emasc(intermediate_features)
 
             processed_intermediate_features = mask_features(processed_intermediate_features, batch["inpaint_mask"])
             latents = posterior_im.latent_dist.sample()
-            generated_images = vae.decode(latents, processed_intermediate_features, int_layers).sample
+            generated_images = vae.decode(
+                latents,
+                processed_intermediate_features,
+                # int_layers
+            ).sample
         else:
             # Encode and decode image without EMASC
             posterior_im = vae.encode(batch["image"])

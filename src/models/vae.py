@@ -338,13 +338,10 @@ class Decoder(nn.Module):
                 intermediate_features.reverse()
                 # middle
                 sample = self.mid_block(sample, latent_embeds)
-                # sample += intermediate_features.pop(0)
-                # print(sample.shape)
                 sample = sample.to(upscale_dtype)
 
                 # up
                 for up_block, int_feats in zip(self.up_blocks, intermediate_features):
-                    print(f'{sample.shape}\t{int_feats.shape}')
                     sample += int_feats
                     sample = up_block(sample, latent_embeds)
             else:
@@ -364,7 +361,7 @@ class Decoder(nn.Module):
             sample = self.conv_norm_out(sample, latent_embeds)
         # 2. Activation Layer
         sample = self.conv_act(sample)
-        print(f'{sample.shape}\t{intermediate_features[-1].shape}')
+
         sample += intermediate_features[-1]
         
         sample = self.conv_out(sample)

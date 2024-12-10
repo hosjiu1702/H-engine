@@ -214,9 +214,9 @@ def main():
     vae.eval()
 
     # Define EMASC model.
-    in_feature_channels = [128, 128, 256, 512, 512]
+    in_feature_channels = [128, 128, 128, 256, 512]
     out_feature_channels = [128, 256, 512, 512, 512]
-    int_layers = [1, 2, 3, 4, 5]
+    # int_layers = [1, 2, 3, 4, 5]
 
     emasc = EMASC(in_feature_channels,
                   out_feature_channels,
@@ -390,7 +390,7 @@ def main():
                     posterior_im, _ = vae.encode(batch["image"])
                     _, intermediate_features = vae.encode(batch["im_mask"])
 
-                    intermediate_features = [intermediate_features[i] for i in int_layers]
+                    # intermediate_features = [intermediate_features[i] for i in int_layers]
 
                 # Use EMASC to process the intermediate features
                 processed_intermediate_features = emasc(intermediate_features)
@@ -400,9 +400,11 @@ def main():
 
                 # Decode the image from the latent space use the EMASC module
                 latents = posterior_im.latent_dist.sample()
-                reconstructed_image = vae.decode(z=latents,
-                                                 intermediate_features=processed_intermediate_features,
-                                                 emasc_layers=int_layers).sample
+                reconstructed_image = vae.decode(
+                    z=latents,
+                    intermediate_features=processed_intermediate_features,
+                    # emasc_layers=int_layers
+                ).sample
 
                 # Compute the loss
                 with accelerator.autocast():
