@@ -21,5 +21,6 @@ scipy==1.10.1
 scikit-image==0.21.0
 clean-fid==0.1.35
 torchmetrics==1.5.2
+torch-fidelity==0.3.0
 git+https://github.com/XPixelGroup/BasicSR.git
 # git+https://github.com/facebookresearch/detectron2@main#subdirectory=projects/DensePose
