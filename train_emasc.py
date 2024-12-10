@@ -216,7 +216,7 @@ def main():
     # Define EMASC model.
     in_feature_channels = [128, 128, 128, 256, 512]
     out_feature_channels = [128, 256, 512, 512, 512]
-    # int_layers = [1, 2, 3, 4, 5]
+    int_layers = [1, 2, 3, 4, 5]
 
     emasc = EMASC(in_feature_channels,
                   out_feature_channels,
@@ -387,8 +387,9 @@ def main():
                 # Convert images to latent space
                 with torch.no_grad():
                     # take latents from the encoded image and intermediate features from the encoded masked image
-                    posterior_im, _ = vae.encode(batch["image"])
-                    _, intermediate_features = vae.encode(batch["im_mask"])
+                    unwrapped_vae = accelerator.unwrap_model(vae, keep_fp32_wrapper=True)
+                    posterior_im, _ = unwrapped_vae.encode(batch["image"])
+                    _, intermediate_features = unwrapped_vae.encode(batch["im_mask"])
 
                     # intermediate_features = [intermediate_features[i] for i in int_layers]
 
@@ -400,7 +401,7 @@ def main():
 
                 # Decode the image from the latent space use the EMASC module
                 latents = posterior_im.latent_dist.sample()
-                reconstructed_image = vae.decode(
+                reconstructed_image = unwrapped_vae.decode(
                     z=latents,
                     intermediate_features=processed_intermediate_features,
                     # emasc_layers=int_layers
@@ -444,10 +445,11 @@ def main():
 
                         # Unwrap the EMASC model
                         unwrapped_emasc = accelerator.unwrap_model(emasc, keep_fp32_wrapper=True)
+                        unwrapped_vae = accelerator.unwrap_model(vae, keep_fp32_wrapper=True)
                         with torch.no_grad():
                             # Extract the images
                             with torch.cuda.amp.autocast():
-                                extract_save_vae_images(vae, unwrapped_emasc, test_dataloader, int_layers,
+                                extract_save_vae_images(unwrapped_vae, unwrapped_emasc, test_dataloader, int_layers,
                                                         args.output_dir, args.test_order,
                                                         save_name=f"imgs_step_{global_step}",
                                                         emasc_type=args.emasc_type)

@@ -16,6 +16,92 @@ from tqdm import tqdm
 from src.utils.generate_fid_stats import make_custom_stats
 
 
+class GTTestDataset(torch.utils.data.Dataset):
+    def __init__(self, dataroot: str, dataset: str, category: str, transform: transforms.Compose):
+        """
+        Dataset for the ground truth test images
+        """
+
+        # Validate inputs
+        assert dataset in ['dresscode', 'vitonhd'], 'Unsupported dataset'
+        assert category in ['all', 'dresses', 'lower_body', 'upper_body'], 'Unsupported category'
+
+        self.dataset = dataset
+        self.category = category
+        self.transform = transform
+        self.dataroot = dataroot
+
+        # Get the paths to the images
+        if dataset == 'dresscode':
+            filepath = os.path.join(dataroot, f"test_pairs_paired.txt")
+            with open(filepath, 'r') as f:
+                lines = f.read().splitlines()
+
+            if category in ['lower_body', 'upper_body', 'dresses']:
+                self.paths = sorted(
+                    [os.path.join(dataroot, category, 'images', line.strip().split()[0]) for line in lines if
+                     os.path.exists(os.path.join(dataroot, category, 'images', line.strip().split()[0]))])
+            else:
+                self.paths = sorted(
+                    [os.path.join(dataroot, category, 'images', line.strip().split()[0]) for line in lines for
+                     category in ['lower_body', 'upper_body', 'dresses'] if
+                     os.path.exists(os.path.join(dataroot, category, 'images', line.strip().split()[0]))])
+        else:  # vitonhd
+            filepath = os.path.join(dataroot, f"test_pairs.txt")
+            with open(filepath, 'r') as f:
+                lines = f.read().splitlines()
+            self.paths = sorted([os.path.join(dataroot, 'test', 'image', line.strip().split()[0]) for line in lines])
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        name = os.path.splitext(os.path.basename(path))[0]
+        img = self.transform(PIL.Image.open(path).convert('RGB'))
+        return img, name
+
+
+class GenTestDataset(torch.utils.data.Dataset):
+    def __init__(self, gen_folder: str, category: str, transform: transforms.Compose):
+        """
+        Dataset for the ground truth test images
+        """
+
+        # Validate inputs
+        assert category in ['all', 'dresses', 'lower_body', 'upper_body'], 'Unsupported category'
+
+        self.category = category
+        self.transform = transform
+        self.gen_folder = gen_folder
+
+        # Get the paths to the images
+        if category in ['lower_body', 'upper_body', 'dresses']:
+            self.paths = sorted(
+                [os.path.join(gen_folder, category, name) for name in os.listdir(os.path.join(gen_folder, category))])
+        elif category == 'all':
+            existing_categories = []
+            for category in ['lower_body', 'upper_body', 'dresses']:
+                if os.path.exists(os.path.join(gen_folder, category)):
+                    existing_categories.append(category)
+
+            self.paths = sorted(
+                [os.path.join(gen_folder, category, name) for category in existing_categories for
+                 name in os.listdir(os.path.join(gen_folder, category)) if
+                 os.path.exists(os.path.join(gen_folder, category, name))])
+        else:
+            raise ValueError('Unsupported category')
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        name = os.path.splitext(os.path.basename(path))[0]
+        img = self.transform(PIL.Image.open(path).convert('RGB'))
+        return img, name
+
+
 def compute_metrics(gen_folder: str, test_order: str, dataset: str, category: str, metrics2compute: List[str],
                     dresscode_dataroot: str, vitonhd_dataroot: str, generated_size: Tuple[int, int] = (512, 384),
                     batch_size: int = 32, workers: int = 8) -> Dict[str, float]:

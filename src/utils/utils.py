@@ -159,4 +159,4 @@ def extract_save_vae_images(vae: AutoencoderKL, emasc: EMASC, test_dataloader: t
             gen_image = (gen_image + 1) / 2  # [-1, 1] -> [0, 1]
             if not os.path.exists(os.path.join(save_path, cat)):
                 os.makedirs(os.path.join(save_path, cat))
-            torchvision.utils.save_image(gen_image, os.path.join(save_path, cat, name), quality=95)
+            torchvision.utils.save_image(gen_image, os.path.join(save_path, cat, name))
