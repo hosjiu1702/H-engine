@@ -37,6 +37,8 @@ from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusio
 from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
+from src.utils import mask_features
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -173,6 +175,8 @@ class TryOnPipeline(
         image_encoder: CLIPVisionModelWithProjection = None,
         requires_safety_checker: bool = False,
         weight_dtype=torch.float32,
+        emasc: Optional[torch.nn.Module] = None,
+        emasc_layers: Optional[List[int]] = None,
     ):
         super().__init__()
 
@@ -256,6 +260,8 @@ class TryOnPipeline(
             feature_extractor=feature_extractor,
             image_encoder=image_encoder,
         )
+        self.emasc = emasc
+        self.emasc_layers = emasc_layers
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
         self.mask_processor = VaeImageProcessor(
@@ -420,7 +426,7 @@ class TryOnPipeline(
 
         return outputs
 
-    def _encode_vae_image(self, image: torch.Tensor, generator: torch.Generator):
+    def _encode_vae_image(self, image: torch.Tensor, generator: torch.Generator, return_intermediate_features=False):
         if isinstance(generator, list):
             image_latents = [
                 retrieve_latents(self.vae.encode(image[i : i + 1]), generator=generator[i])
@@ -428,14 +434,19 @@ class TryOnPipeline(
             ]
             image_latents = torch.cat(image_latents, dim=0)
         else:
-            image_latents = retrieve_latents(self.vae.encode(image), generator=generator)
+            # image_latents = retrieve_latents(self.vae.encode(image), generator=generator)
+            image_latents, intermediate_features = self.vae.encode(image)
+            image_latents = image_latents.latent_dist.sample(generator=generator)
 
         image_latents = self.vae.config.scaling_factor * image_latents
+
+        if return_intermediate_features:
+            return image_latents, intermediate_features
 
         return image_latents
 
     def prepare_mask_latents(
-        self, mask, masked_image, batch_size, height, width, dtype, device, generator,
+        self, mask, masked_image, batch_size, height, width, dtype, device, generator, return_intermediate_features=False
     ):
         # resize the mask to latents shape as we concatenate the mask to the latents
         # we do that before converting to dtype to avoid breaking in case we're using cpu_offload
@@ -450,7 +461,13 @@ class TryOnPipeline(
         if masked_image.shape[1] == 4:
             masked_image_latents = masked_image
         else:
-            masked_image_latents = self._encode_vae_image(masked_image, generator=generator)
+            if return_intermediate_features:
+                masked_image_latents, intermediate_features = self._encode_vae_image(
+                    masked_image, generator=generator, return_intermediate_features=True
+                )
+                intermediate_features = [intermediate_features[i] for i in self.emasc_layers] # we just get some selected intermediate features.
+            else:
+                masked_image_latents = self._encode_vae_image(masked_image, generator=generator)
 
         # duplicate mask and masked_image_latents for each generation per prompt, using mps friendly method
         if mask.shape[0] < batch_size:
@@ -472,6 +489,10 @@ class TryOnPipeline(
 
         # aligning device to prevent device errors when concating it with the latent model input
         masked_image_latents = masked_image_latents.to(device=device, dtype=dtype)
+
+        if return_intermediate_features:
+            return mask, masked_image_latents, intermediate_features
+
         return mask, masked_image_latents
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.StableDiffusionImg2ImgPipeline.get_timesteps
@@ -805,7 +826,7 @@ class TryOnPipeline(
         else:
             masked_image = masked_image_latents
 
-        mask, masked_image_latents = self.prepare_mask_latents(
+        mask, masked_image_latents, intermediate_features = self.prepare_mask_latents(
             mask_condition,
             masked_image,
             batch_size * num_images_per_prompt,
@@ -814,11 +835,16 @@ class TryOnPipeline(
             self.weight_dtype,
             device,
             generator,
+            return_intermediate_features=True,
         )
+
+        # EMASC
+        intermediate_features = self.emasc(intermediate_features)
+        intermediate_features = mask_features(intermediate_features, mask)
 
         densepose_image = self.image_processor.preprocess(densepose_image, height, width)
         densepose_latents = self.vae.encode(densepose_image).latent_dist.sample(generator=generator)
-        densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is interested thing to understand :)
+        densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is an interested thing to understand :)
         densepose_latents.to(device=device, dtype=self.weight_dtype)
 
         cloth_image = self.image_processor.preprocess(cloth_image, height, width)
@@ -909,8 +935,10 @@ class TryOnPipeline(
         if output_type == "pil":
             image = self.vae.decode(
                 latents / self.vae.config.scaling_factor,
+                intermediate_features,
+                self.emasc_layers,
                 return_dict=False,
-                generator=generator,
+                generator=generator, # recheck generator
             )[0]
         else:
             raise ValueError('We just support Pillow Image for now.')
