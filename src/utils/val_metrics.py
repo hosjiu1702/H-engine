@@ -169,51 +169,51 @@ def compute_metrics(gen_folder: str, test_order: str, dataset: str, category: st
                                         dataset_split="custom", use_dataparallel=False)
 
     # Define transforms, datasets and loaders
-    trans = transforms.Compose([
-        transforms.Resize(generated_size),
-        transforms.ToTensor(),
-    ])
+#     trans = transforms.Compose([
+#         transforms.Resize(generated_size),
+#         transforms.ToTensor(),
+#     ])
 
-    gen_dataset = GenTestDataset(gen_folder, category, transform=trans)
-    gt_dataset = GTTestDataset(gt_folder, dataset, category, trans)
+#     gen_dataset = GenTestDataset(gen_folder, category, transform=trans)
+#     gt_dataset = GTTestDataset(gt_folder, dataset, category, trans)
 
-    gen_loader = DataLoader(gen_dataset, batch_size=batch_size, shuffle=False, num_workers=workers)
-    gt_loader = DataLoader(gt_dataset, batch_size=batch_size, shuffle=False, num_workers=workers)
+#     gen_loader = DataLoader(gen_dataset, batch_size=batch_size, shuffle=False, num_workers=workers)
+#     gt_loader = DataLoader(gt_dataset, batch_size=batch_size, shuffle=False, num_workers=workers)
 
-    # Define metrics models
-    if "is_score" in metrics2compute or "all" in metrics2compute:
-        model_is = InceptionScore(normalize=True).to(device)
+#     # Define metrics models
+#     if "is_score" in metrics2compute or "all" in metrics2compute:
+#         model_is = InceptionScore(normalize=True).to(device)
 
-    if "ssim_score" in metrics2compute or "all" in metrics2compute:
-        ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
+#     if "ssim_score" in metrics2compute or "all" in metrics2compute:
+#         ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
 
-    if "lpips_score" in metrics2compute or "all" in metrics2compute:
-        lpips = LearnedPerceptualImagePatchSimilarity(net='alex', normalize=True).to(device)
+#     if "lpips_score" in metrics2compute or "all" in metrics2compute:
+#         lpips = LearnedPerceptualImagePatchSimilarity(net_type='alex', normalize=True).to(device)
 
-    for idx, (gen_batch, gt_batch) in tqdm(enumerate(zip(gen_loader, gt_loader)), total=len(gt_loader)):
-        gen_images, gen_names = gen_batch
-        gt_images, gt_names = gt_batch
+#     for idx, (gen_batch, gt_batch) in tqdm(enumerate(zip(gen_loader, gt_loader)), total=len(gt_loader)):
+#         gen_images, gen_names = gen_batch
+#         gt_images, gt_names = gt_batch
 
-        assert gen_names == gt_names  # Be sure that the images are in the same order
+#         assert gen_names == gt_names  # Be sure that the images are in the same order
 
-        gen_images = gen_images.to(device)
-        gt_images = gt_images.to(device)
+#         gen_images = gen_images.to(device)
+#         gt_images = gt_images.to(device)
 
-        if "is_score" in metrics2compute or "all" in metrics2compute:
-            model_is.update(gen_images)
+#         if "is_score" in metrics2compute or "all" in metrics2compute:
+#             model_is.update(gen_images)
 
-        if "ssim_score" in metrics2compute or "all" in metrics2compute:
-            ssim.update(gen_images, gt_images)
+#         if "ssim_score" in metrics2compute or "all" in metrics2compute:
+#             ssim.update(gen_images, gt_images)
 
-        if "lpips_score" in metrics2compute or "all" in metrics2compute:
-            lpips.update(gen_images, gt_images)
+#         if "lpips_score" in metrics2compute or "all" in metrics2compute:
+#             lpips.update(gen_images, gt_images)
 
-    if "is_score" in metrics2compute or "all" in metrics2compute:
-        is_score, is_std = model_is.compute()
-    if "ssim_score" in metrics2compute or "all" in metrics2compute:
-        ssim_score = ssim.compute()
-    if "lpips_score" in metrics2compute or "all" in metrics2compute:
-        lpips_score = lpips.compute()
+#     if "is_score" in metrics2compute or "all" in metrics2compute:
+#         is_score, is_std = model_is.compute()
+#     if "ssim_score" in metrics2compute or "all" in metrics2compute:
+#         ssim_score = ssim.compute()
+#     if "lpips_score" in metrics2compute or "all" in metrics2compute:
+#         lpips_score = lpips.compute()
 
     results = {}
 

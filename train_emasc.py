@@ -210,7 +210,7 @@ def main():
         set_seed(args.seed)
 
     # Load VAE model.
-    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae")
+    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", use_safetensors=False)
     vae.eval()
 
     # Define EMASC model.
@@ -457,8 +457,13 @@ def main():
                             # Compute the metrics
                             metrics = compute_metrics(
                                 os.path.join(args.output_dir, f"imgs_step_{global_step}_{args.test_order}"),
-                                args.test_order, args.dataset, 'all', ['all'], args.dresscode_dataroot,
-                                args.vitonhd_dataroot)
+                                args.test_order,
+                                args.dataset,
+                                'all',
+                                ['kid_score', 'fid_score'],
+                                args.dresscode_dataroot,
+                                args.vitonhd_dataroot
+                            )
 
                             print(metrics, flush=True)
                             accelerator.log(metrics, step=global_step)
