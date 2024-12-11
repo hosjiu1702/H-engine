@@ -6,6 +6,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms import v2
 from PIL import Image
 from transformers import CLIPImageProcessor
+from src.utils import is_image
 
 
 class VITONHDDataset(Dataset):
@@ -48,7 +49,7 @@ class VITONHDDataset(Dataset):
         datapath = os.path.join(data_rootpath, mode)
 
         def _get_file_paths(root_dir: Union[Path, Text]) -> List[Path]:
-            return [Path(root_dir, fname) for fname in sorted(os.listdir(root_dir))]
+            return [Path(root_dir, fname) for fname in sorted(os.listdir(root_dir)) if is_image(fname)]
 
         if mode == 'train':
             if self.use_paired_data:
