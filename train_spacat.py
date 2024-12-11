@@ -40,6 +40,7 @@ from src.models.unet_2d_condition import UNet2DConditionModel
 from src.models.attention_processor import SkipAttnProcessor
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
+from src.utils.training_utils import compute_snr
 
 
 if is_wandb_available():
@@ -272,6 +273,13 @@ def parse_args():
         action='store_true',
         help='Whether or not to use Dilated-relaxed Mask in section 3.3 in FitDit paper'
     )
+    parser.add_argument(
+        "--snr_gamma",
+        type=float,
+        default=None,
+        help="SNR weighting gamma to be used if rebalancing the loss. Recommended value is 5.0. "
+        "More details here: https://arxiv.org/abs/2303.09556.",
+    )
 
     args = parser.parse_args()
 
@@ -478,7 +486,19 @@ def main():
 
                 unet_input = torch.cat([noisy_latents, masks, masked_image_latents, densepose_latents], dim=1) # concatenate in channel dim
                 noise_pred = unet(unet_input, timesteps, encoder_hidden_states=None).sample # Denoising or diffusion backward process
-                loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
+                
+                if args.snr_gamma is None:
+                    loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
+                else:
+                    snr_timesteps = timesteps
+                    snr = compute_snr(noise_scheduler, snr_timesteps)
+                    mse_loss_weights = (
+                        torch.stack([snr, args.snr_gamma * torch.ones_like(snr_timesteps)], dim=1).min(dim=1)[0] / snr
+                    )
+                    assert noise_scheduler.config.prediction_type == 'epsilon', "Only support noise prediction for Min-SNR weighting strategy."
+                    loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="none")
+                    loss = loss.mean(dim=list(range(1, len(loss.shape)))) * mse_loss_weights
+                    loss = loss.mean()
 
                 # For logging purpose, you need to gather losses across
                 # all processes (in distributed training if any) manually
