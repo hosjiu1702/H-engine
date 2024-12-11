@@ -160,3 +160,11 @@ def extract_save_vae_images(vae: AutoencoderKL, emasc: EMASC, test_dataloader: t
             if not os.path.exists(os.path.join(save_path, cat)):
                 os.makedirs(os.path.join(save_path, cat))
             torchvision.utils.save_image(gen_image, os.path.join(save_path, cat, name))
+
+
+def is_image(filename: str) -> bool:
+    VALID_IMAGE_EXTENSION = {'.png', '.jpg'}
+    _, file_ext = os.path.splitext(filename)
+    if file_ext in VALID_IMAGE_EXTENSION:
+        return True
+    return False
