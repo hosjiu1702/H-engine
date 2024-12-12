@@ -39,6 +39,7 @@ from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionS
 
 from src.utils import mask_features
 from src.models.emasc import EMASC
+from src.models.autoencoder_kl import AutoencoderKLForEmasc
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -140,7 +141,7 @@ class TryOnPipeline(
         - [`~loaders.FromSingleFileMixin.from_single_file`] for loading `.ckpt` files
 
     Args:
-        vae ([`AutoencoderKL`, `AsymmetricAutoencoderKL`]):
+        vae ([`AutoencoderKLForEmasc`]):
             Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
         text_encoder ([`CLIPTextModel`]):
             Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
@@ -166,7 +167,7 @@ class TryOnPipeline(
 
     def __init__(
         self,
-        vae: Union[AutoencoderKL, AsymmetricAutoencoderKL],
+        vae: Union[AutoencoderKLForEmasc],
         unet: UNet2DConditionModel,
         scheduler: KarrasDiffusionSchedulers,
         text_encoder: CLIPTextModel = None,
@@ -436,7 +437,10 @@ class TryOnPipeline(
             image_latents = torch.cat(image_latents, dim=0)
         else:
             # image_latents = retrieve_latents(self.vae.encode(image), generator=generator)
-            image_latents, intermediate_features = self.vae.encode(image)
+            if return_intermediate_features:
+                image_latents, intermediate_features = self.vae.encode(image, return_intermediate_features)
+            else:
+                image_latents = self.vae.encode(image)
             image_latents = image_latents.latent_dist.sample(generator=generator)
 
         image_latents = self.vae.config.scaling_factor * image_latents
