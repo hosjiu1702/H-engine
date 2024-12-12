@@ -38,6 +38,7 @@ from src.utils import (
 )
 from src.models.unet_2d_condition import UNet2DConditionModel
 from src.models.attention_processor import SkipAttnProcessor
+from src.models.autoencoder_kl import AutoencoderKLForEmasc
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
 from src.utils.training_utils import compute_snr
@@ -312,7 +313,7 @@ def main():
 
     # Load diffusion-related components
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler')
-    vae = AutoencoderKL.from_pretrained(args.vae_path) # float16 vs float32 -> which one to choose?
+    vae = AutoencoderKLForEmasc.from_pretrained(args.vae_path) # float16 vs float32 -> which one to choose?
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
 
     init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
@@ -342,7 +343,6 @@ def main():
     accelerator.print('\n==== Trainable Params ====')
     accelerator.print(f'VAE: {total_trainable_params(vae)}')
     accelerator.print(f'UNet: {total_trainable_params(unet)}')
-    accelerator.print('==== Trainable Params ====\n')
 
     # Enable TF32 for faster training on Ampere GPUs (and later)
     if args.allow_tf32:
@@ -550,6 +550,7 @@ def main():
                                         cloth_image=batch['cloth_raw'],
                                         height=args.height,
                                         width=args.width,
+                                        guidance_scale=1.5
                                     ).images # pil
                                     img_path = os.path.join(args.output_dir, rand_name, 'images')
                                     os.makedirs(img_path, exist_ok=True)

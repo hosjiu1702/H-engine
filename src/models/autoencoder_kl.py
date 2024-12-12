@@ -34,7 +34,7 @@ from diffusers.models.modeling_utils import ModelMixin
 from src.models.vae import Decoder, DecoderOutput, DiagonalGaussianDistribution, Encoder
 
 
-class AutoencoderKL(ModelMixin, ConfigMixin, FromOriginalModelMixin):
+class AutoencoderKLForEmasc(ModelMixin, ConfigMixin, FromOriginalModelMixin):
     r"""
     A VAE model with KL loss for encoding images into latents and decoding latent representations into images.
 
@@ -248,7 +248,9 @@ class AutoencoderKL(ModelMixin, ConfigMixin, FromOriginalModelMixin):
 
     @apply_forward_hook
     def encode(
-        self, x: torch.Tensor, return_dict: bool = True
+        self, x: torch.Tensor,
+        return_dict: bool = True,
+        return_intermediate_features: bool = False,
     ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
         """
         Encode a batch of images into latents.
@@ -272,7 +274,10 @@ class AutoencoderKL(ModelMixin, ConfigMixin, FromOriginalModelMixin):
             encoded_slices = [self.encoder(x_slice) for x_slice in x.split(1)]
             h = torch.cat(encoded_slices)
         else:
-            h, intermediate_features = self.encoder(x)
+            if return_intermediate_features:
+                h, intermediate_features = self.encoder(x, return_intermediate_features)
+            else:
+                h = self.encoder(x)
 
         if self.quant_conv is not None:
             moments = self.quant_conv(h)
@@ -284,7 +289,10 @@ class AutoencoderKL(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         if not return_dict:
             return (posterior,)
 
-        return AutoencoderKLOutput(latent_dist=posterior), intermediate_features
+        if return_intermediate_features:
+            return AutoencoderKLOutput(latent_dist=posterior), intermediate_features
+
+        return AutoencoderKLOutput(latent_dist=posterior)
 
     def _decode(
             self, z: torch.Tensor,

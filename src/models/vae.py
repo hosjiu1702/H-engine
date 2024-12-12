@@ -137,7 +137,7 @@ class Encoder(nn.Module):
 
         self.gradient_checkpointing = False
 
-    def forward(self, sample: torch.Tensor) -> torch.Tensor:
+    def forward(self, sample: torch.Tensor, return_intermediate_features=False) -> torch.Tensor:
         r"""The forward method of the `Encoder` class."""
         intermediate_features = []
 
@@ -183,7 +183,10 @@ class Encoder(nn.Module):
         sample = self.conv_act(sample)
         sample = self.conv_out(sample)
 
-        return sample, intermediate_features
+        if return_intermediate_features:
+            return sample, intermediate_features
+        
+        return sample
 
 
 class Decoder(nn.Module):
@@ -362,7 +365,7 @@ class Decoder(nn.Module):
         # 2. Activation Layer
         sample = self.conv_act(sample)
 
-        sample += intermediate_features[-1]
+        sample = sample + intermediate_features[-1] if intermediate_features else sample
         
         sample = self.conv_out(sample)
 
