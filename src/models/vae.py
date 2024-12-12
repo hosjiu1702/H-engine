@@ -365,7 +365,7 @@ class Decoder(nn.Module):
         # 2. Activation Layer
         sample = self.conv_act(sample)
 
-        sample += intermediate_features[-1]
+        sample = sample + intermediate_features[-1] if intermediate_features else sample
         
         sample = self.conv_out(sample)
 
