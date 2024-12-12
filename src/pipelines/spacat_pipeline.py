@@ -38,6 +38,7 @@ from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
 from src.utils import mask_features
+from src.models.emasc import EMASC
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -175,7 +176,7 @@ class TryOnPipeline(
         image_encoder: CLIPVisionModelWithProjection = None,
         requires_safety_checker: bool = False,
         weight_dtype=torch.float32,
-        emasc: Optional[torch.nn.Module] = None,
+        emasc: Optional[EMASC] = None,
         emasc_layers: Optional[List[int]] = None,
     ):
         super().__init__()
@@ -826,21 +827,32 @@ class TryOnPipeline(
         else:
             masked_image = masked_image_latents
 
-        mask, masked_image_latents, intermediate_features = self.prepare_mask_latents(
-            mask_condition,
-            masked_image,
-            batch_size * num_images_per_prompt,
-            height,
-            width,
-            self.weight_dtype,
-            device,
-            generator,
-            return_intermediate_features=True,
-        )
-
-        # EMASC
-        intermediate_features = self.emasc(intermediate_features)
-        intermediate_features = mask_features(intermediate_features, mask)
+        # Inference with EMASC
+        if self.emasc is not None:
+            mask, masked_image_latents, intermediate_features = self.prepare_mask_latents(
+                mask_condition,
+                masked_image,
+                batch_size * num_images_per_prompt,
+                height,
+                width,
+                self.weight_dtype,
+                device,
+                generator,
+                return_intermediate_features=True,
+            )
+            intermediate_features = self.emasc(intermediate_features)
+            intermediate_features = mask_features(intermediate_features, mask)
+        else:
+            mask, masked_image_latents = self.prepare_mask_latents(
+                mask_condition,
+                masked_image,
+                batch_size * num_images_per_prompt,
+                height,
+                width,
+                self.weight_dtype,
+                device,
+                generator,
+            )
 
         densepose_image = self.image_processor.preprocess(densepose_image, height, width)
         densepose_latents = self.vae.encode(densepose_image).latent_dist.sample(generator=generator)
@@ -933,13 +945,20 @@ class TryOnPipeline(
                         callback(step_idx, t, latents)
 
         if output_type == "pil":
-            image = self.vae.decode(
-                latents / self.vae.config.scaling_factor,
-                intermediate_features,
-                self.emasc_layers,
-                return_dict=False,
-                generator=generator, # recheck generator
-            )[0]
+            if self.emasc is not None:
+                image = self.vae.decode(
+                    latents / self.vae.config.scaling_factor,
+                    intermediate_features,
+                    self.emasc_layers,
+                    return_dict=False,
+                    generator=generator, # recheck generator
+                )[0]
+            else:
+                image = self.vae.decode(
+                    latents / self.vae.config.scaling_factor,
+                    return_dict=False,
+                    generator=generator
+                )[0]
         else:
             raise ValueError('We just support Pillow Image for now.')
             # image = latents
