@@ -75,7 +75,7 @@ class OpenPose:
             # output_image = cv2.resize(cv2.cvtColor(detected_map, cv2.COLOR_BGR2RGB), (768, 1024))
             # cv2.imwrite('/home/aigc/ProjectVTON/OpenPose/keypoints/out_pose.jpg', output_image)
 
-        return keypoints
+        return keypoints, detected_map
 
 
 if __name__ == '__main__':
