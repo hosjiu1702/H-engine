@@ -550,6 +550,7 @@ def main():
                                         cloth_image=batch['cloth_raw'],
                                         height=args.height,
                                         width=args.width,
+                                        guidance_scale=1.5
                                     ).images # pil
                                     img_path = os.path.join(args.output_dir, rand_name, 'images')
                                     os.makedirs(img_path, exist_ok=True)
