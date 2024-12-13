@@ -21,7 +21,7 @@ class Maskerv2:
             category: Text = 'upper_body',
             return_img: bool = True
     ) -> Union[np.ndarray, PIL.Image.Image]:
-        keypoints = self.openpose(img)
+        keypoints, _ = self.openpose(img)
         body_parse, _ = self.parser(img)
         _mask, _, _, head_mask  = get_mask_location(
             model_type='hd',
