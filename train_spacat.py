@@ -374,12 +374,28 @@ def main():
         use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
     )
 
+    test_dataset = VITONHDDataset(
+        data_rootpath=args.data_dir,
+        use_trainset=False,
+        height=args.height,
+        width=args.width,
+        use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+    )
+
     if args.use_subset:
         # get only first `num_subset_samples` samples
         train_dataset = Subset(train_dataset, [n for n in range(args.num_subset_samples)])
 
     train_dataloader = DataLoader(
         dataset=train_dataset,
+        batch_size=args.train_batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=True,
+    )
+
+    test_dataloader = DataLoader(
+        dataset=test_dataset,
         batch_size=args.train_batch_size,
         shuffle=True,
         num_workers=args.num_workers,
@@ -410,7 +426,7 @@ def main():
     # * Device Placement
     # * Gradient Synchronization
     # * what else?
-    unet, optimizer, train_dataloader = accelerator.prepare(unet, optimizer, train_dataloader,)
+    unet, optimizer, train_dataloader, test_dataloader = accelerator.prepare(unet, optimizer, train_dataloader, test_dataloader)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     # (actually I don't know why this could happen :|)
@@ -535,6 +551,7 @@ def main():
                         if global_steps % args.validation_steps == 0:
                             unwrapped_unet = accelerator.unwrap_model(unet)
                             with torch.no_grad():
+                                """ Init temporal pipeline for inferencing."""
                                 pipe = TryOnPipeline(
                                     vae=vae,
                                     unet=unwrapped_unet,
@@ -543,6 +560,8 @@ def main():
                                 # allows to run in mixed precision mode
                                 # not using in backward pass
                                 with torch.amp.autocast(device.type):
+                                    """ 1st test batch. """
+                                    batch = test_dataset[0]
                                     images = pipe(
                                         image=batch['image'],
                                         mask_image=batch['mask'],
