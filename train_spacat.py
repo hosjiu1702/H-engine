@@ -560,20 +560,20 @@ def main():
                             with torch.no_grad():
                                 """ Init temporal pipeline for inferencing."""
                                 pipe = TryOnPipeline(
-                                    vae=vae,
-                                    unet=unwrapped_unet,
+                                    vae=vae.to(dtype=torch.float16),
+                                    unet=unwrapped_unet.to(dtype=torch.float16),
                                     scheduler=noise_scheduler,
                                 ).to(device)
                                 # allows to run in mixed precision mode
                                 # not using in backward pass
                                 with torch.amp.autocast(device.type):
                                     """ 1st test batch. """
-                                    # batch = test_dataset[0]
+                                    batch = next(iter(test_dataloader))
                                     images = pipe(
-                                        image=batch['image'],
-                                        mask_image=batch['mask'],
-                                        densepose_image=batch['densepose'],
-                                        cloth_image=batch['cloth_raw'],
+                                        image=batch['image'].to(device.type, dtype=weight_dtype),
+                                        mask_image=batch['mask'].to(device.type, dtype=weight_dtype),
+                                        densepose_image=batch['densepose'].to(device.type, dtype=weight_dtype),
+                                        cloth_image=batch['cloth_raw'].to(device.type, dtype=weight_dtype),
                                         height=args.height,
                                         width=args.width,
                                         guidance_scale=1.5
