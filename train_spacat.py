@@ -448,7 +448,7 @@ def main():
             accelerator.init_trackers(
                 project_name=args.project_name,
                 config=dict(vars(args)),
-                init_kwargs={'wandb': {'name': args.wandb_run_name}} if args.wandb_name_run else {}
+                init_kwargs={'wandb': {'name': args.wandb_name_run}} if args.wandb_name_run else {}
             )
 
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
