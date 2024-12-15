@@ -568,12 +568,12 @@ def main():
                                 # not using in backward pass
                                 with torch.amp.autocast(device.type):
                                     """ 1st test batch. """
-                                    batch = test_dataset[0]
+                                    # batch = test_dataset[0]
                                     images = pipe(
-                                        image=batch['image'].to(dtype=weight_dtype),
-                                        mask_image=batch['mask'].to(dtype=weight_dtype),
-                                        densepose_image=batch['densepose'].to(dtype=weight_dtype),
-                                        cloth_image=batch['cloth_raw'].to(dtype=weight_dtype),
+                                        image=batch['image'],
+                                        mask_image=batch['mask'],
+                                        densepose_image=batch['densepose'],
+                                        cloth_image=batch['cloth_raw'],
                                         height=args.height,
                                         width=args.width,
                                         guidance_scale=1.5
