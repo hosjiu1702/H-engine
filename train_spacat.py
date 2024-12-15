@@ -133,6 +133,12 @@ def parse_args():
         help='Project name for init with wandb'
     )
     parser.add_argument(
+        '--wandb_name_run',
+        type=str,
+        default=None,
+        help='Wandb name run.'
+    )
+    parser.add_argument(
         '--mixed_precision',
         type=str,
         default=None,
@@ -442,6 +448,7 @@ def main():
             accelerator.init_trackers(
                 project_name=args.project_name,
                 config=dict(vars(args)),
+                init_kwargs={'wandb': {'name': args.wandb_run_name}} if args.wandb_name_run else {}
             )
 
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
