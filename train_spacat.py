@@ -560,8 +560,8 @@ def main():
                             with torch.no_grad():
                                 """ Init temporal pipeline for inferencing."""
                                 pipe = TryOnPipeline(
-                                    vae=vae.to(dtype=torch.float16),
-                                    unet=unwrapped_unet.to(dtype=torch.float16),
+                                    vae=vae,
+                                    unet=unwrapped_unet,
                                     scheduler=noise_scheduler,
                                 ).to(device)
                                 # allows to run in mixed precision mode
