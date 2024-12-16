@@ -558,7 +558,7 @@ def main():
                         if global_steps % args.validation_steps == 0:
                             unwrapped_unet = accelerator.unwrap_model(unet)
                             with torch.no_grad():
-                                """ Init temporal pipeline for inferencing."""
+                                """ Init temporarily pipeline for inferencing."""
                                 pipe = TryOnPipeline(
                                     vae=vae,
                                     unet=unwrapped_unet,
