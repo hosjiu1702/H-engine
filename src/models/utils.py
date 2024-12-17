@@ -1,6 +1,9 @@
 from typing import Tuple
 import os
+import PIL
 from PIL import Image, ImageOps
+import numpy as np
+import cv2
 from huggingface_hub import hf_hub_download
 import torch
 from diffusers import UNet2DConditionModel, DDPMScheduler
@@ -107,3 +110,18 @@ def get_densepose_map(img_path: str, size: Tuple = (384, 512)) -> Image.Image:
 def preprocess_image(img: Image.Image, w: int, h: int) -> torch.Tensor:
     img = VITONHDDataset.preprocess(img, w, h)
     return img
+
+
+def apply_poisson_blending(
+    original_img: PIL.Image.Image,
+    tryon_img: PIL.Image.Image,
+    mask_img: PIL.Image.Image
+) -> PIL.Image.Image:
+    w, h = original_img.size
+    original_img = np.array(original_img)
+    tryon_img = np.array(tryon_img)
+    mask_img = np.array(mask_img)
+    mask_img = 255 - mask_img
+    output = cv2.seamlessClone(original_img, tryon_img, mask_img, (w//2, h//2), cv2.NORMAL_CLONE)
+
+    return Image.fromarray(output, mode='RGB')
