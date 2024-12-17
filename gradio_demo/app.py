@@ -1,6 +1,7 @@
 import os
 from os import path as osp
 from enum import Enum
+from dotenv import load_dotenv
 import PIL
 from PIL import Image, ImageOps
 import gradio as gr
@@ -15,6 +16,7 @@ from src.utils import get_project_root
 PROJECT_ROOT_PATH = get_project_root()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 os.environ['PYTHONBREAKPOINT'] = "0"
+load_dotenv()
 
 
 class OutputSize(Enum):
@@ -28,7 +30,8 @@ masker = Masker()
 model_path = download_model(
     repo_id='bui/Navier-1',
     ckpt_name='ckpt-20000-1512-preview',
-    model_name='Navier-1'
+    model_name='Navier-1',
+    token=os.getenv('HF_TOKEN')
 )
 unet, vae, scheduler = load_model(model_path)
 
@@ -154,4 +157,4 @@ with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(share=True)
+    demo.launch(share=True, auth=('heatmob', 'navier'))

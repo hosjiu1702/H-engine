@@ -17,19 +17,21 @@ from src.dataset.vitonhd import VITONHDDataset
 PROJECT_ROOT_PATH = get_project_root()
 
 
-def download_model(repo_id, ckpt_name, model_name):
+def download_model(repo_id, ckpt_name, model_name, token=False):
     # UNET
     unet_path = hf_hub_download(
         repo_id=repo_id,
         subfolder=os.path.join(ckpt_name, 'unet'),
         filename='diffusion_pytorch_model.safetensors',
-        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name)
+        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name),
+        token=token
     )
     hf_hub_download(
         repo_id=repo_id,
         subfolder=os.path.join(ckpt_name, 'unet'),
         filename='config.json',
-        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name)
+        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name),
+        token=token
     )
 
     # VAE
@@ -37,13 +39,15 @@ def download_model(repo_id, ckpt_name, model_name):
         repo_id=repo_id,
         subfolder=os.path.join(ckpt_name, 'vae'),
         filename='diffusion_pytorch_model.safetensors',
-        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name)
+        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name),
+        token=token
     )
     hf_hub_download(
         repo_id=repo_id,
         subfolder=os.path.join(ckpt_name, 'vae'),
         filename='config.json',
-        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name)
+        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name),
+        token=token
     )
 
     # SCHEDULER
@@ -51,7 +55,8 @@ def download_model(repo_id, ckpt_name, model_name):
         repo_id=repo_id,
         subfolder=os.path.join(ckpt_name, 'scheduler'),
         filename='scheduler_config.json',
-        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name)
+        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name),
+        token=token
     )
 
     # model_index.json
@@ -59,7 +64,8 @@ def download_model(repo_id, ckpt_name, model_name):
         repo_id=repo_id,
         subfolder=ckpt_name,
         filename='model_index.json',
-        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name)
+        local_dir=os.path.join(PROJECT_ROOT_PATH, 'checkpoints', model_name),
+        token=token
     )
 
     model_path = os.path.dirname(os.path.dirname(unet_path))
