@@ -93,8 +93,8 @@ def get_densepose_map(img_path: str, size: Tuple = (384, 512)) -> Image.Image:
 
     args = apply_net.create_argument_parser().parse_args((
         'show',
-        '../configs/densepose_rcnn_R_50_FPN_s1x.yaml',
-        '../checkpoints/densepose/model_final_162be9.pkl',
+        os.path.join(PROJECT_ROOT_PATH, 'configs/densepose_rcnn_R_50_FPN_s1x.yaml'),
+        os.path.join(PROJECT_ROOT_PATH, 'checkpoints/densepose/model_final_162be9.pkl'),
         img_path,
         'dp_segm',
         '-v'
