@@ -1,3 +1,4 @@
+import os
 from os import path as osp
 from enum import Enum
 import PIL
@@ -13,6 +14,7 @@ from src.utils import get_project_root
 
 PROJECT_ROOT_PATH = get_project_root()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+os.environ['PYTHONBREAKPOINT'] = "0"
 
 
 class GradioImageSize(Enum):
@@ -36,7 +38,7 @@ model_path = download_model(
 unet, vae, scheduler = load_model(model_path)
 
 # Load diffusion try-on pipeline
-pipe = TryOnPipeline(
+pipeline = TryOnPipeline(
     unet=unet,
     vae=vae,
     scheduler=scheduler
@@ -59,18 +61,18 @@ def try_on(person_img_path: str, garment_img_path: str):
     garment = Image.open(garment_img_path)
 
     # Resize images to the allowed resolution
-    person = ImageOps.fit(person, size=(OutputSize.W, OutputSize.H))
-    garment = ImageOps.fit(garment, size=(OutputSize.W, OutputSize.H))
+    person = ImageOps.fit(person, size=(OutputSize.W.value, OutputSize.H.value))
+    garment = ImageOps.fit(garment, size=(OutputSize.W.value, OutputSize.H.value))
 
     # Get mask
-    mask = masker.create_mask(person_img)
+    mask = masker.create_mask(person)
 
     # Get densepose
-    densepose = get_densepose_map(person_img_path, size=(OutputSize.W, OutputSize.H))
+    densepose = get_densepose_map(person_img_path, size=(OutputSize.W.value, OutputSize.H.value))
 
     # Preprocessing
-    person = preprocess_image(person, OutputSize.W, OutputSize.H).unsqueeze(0)
-    garment = preprocess_image(garment, OutputSize.W, OutputSize.H).unsqueeze(0)
+    person = preprocess_image(person, OutputSize.W.value, OutputSize.H.value).unsqueeze(0)
+    garment = preprocess_image(garment, OutputSize.W.value, OutputSize.H.value).unsqueeze(0)
     mask = pil_to_tensor(mask).unsqueeze(0)
     densepose = pil_to_tensor(densepose).unsqueeze(0)
 
@@ -81,11 +83,11 @@ def try_on(person_img_path: str, garment_img_path: str):
                 mask_image=mask.to(device),
                 densepose_image=densepose.to(device),
                 cloth_image=garment.to(device),
-                height=OutputSize.H,
-                width=OutputSize.W,
+                height=OutputSize.H.value,
+                width=OutputSize.W.value,
                 generator=torch.manual_seed(1996),
                 guidance_scale=1.5,
-            ).image[0]
+            ).images[0]
     
     return image
 
@@ -148,4 +150,4 @@ with gr.Blocks(theme='ParityError/Interstellar') as demo:
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(share=True)
