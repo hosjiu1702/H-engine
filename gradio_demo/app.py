@@ -5,7 +5,6 @@ from PIL import Image, ImageOps
 import gradio as gr
 import torch
 from torchvision.transforms.functional import pil_to_tensor
-from diffusers import DiffusionPipeline
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.models.utils import download_model, load_model, get_densepose_map, preprocess_image
 from src.utils.mask_v2 import Maskerv2 as Masker
@@ -44,14 +43,13 @@ pipe = TryOnPipeline(
 ).to(device)
 
 
-def try_on(pipeline: DiffusionPipeline, person_img_path: str, garment_img_path: str, masker):
+def try_on(person_img_path: str, garment_img_path: str):
     """
     Main function to run try-on process.
     
     Args:
-        pipeline (DiffusionPipeline): Diffusion pipeline to do the try-on task.
-        person_img (str): path to the person image.
-        garment_img (str): path to the garment image.
+        person_img_path (str): path to the person image.
+        garment_img_path (str): path to the garment image.
     
     Returns:
         Try-on image
