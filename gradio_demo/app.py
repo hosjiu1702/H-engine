@@ -7,7 +7,7 @@ import gradio as gr
 import torch
 from torchvision.transforms.functional import pil_to_tensor
 from src.pipelines.spacat_pipeline import TryOnPipeline
-from src.models.utils import download_model, load_model, get_densepose_map, preprocess_image
+from src.models.utils import download_model, load_model, get_densepose_map, preprocess_image, apply_poisson_blending
 from src.utils.mask_v2 import Maskerv2 as Masker
 from src.utils import get_project_root
 
@@ -40,7 +40,7 @@ pipeline = TryOnPipeline(
 ).to(device)
 
 
-def try_on(person_img_path: str, garment_img_path: str):
+def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool):
     """
     Main function to run try-on process.
     
@@ -66,33 +66,36 @@ def try_on(person_img_path: str, garment_img_path: str):
     densepose = get_densepose_map(person_img_path, size=(OutputSize.W.value, OutputSize.H.value))
 
     # Preprocessing
-    person = preprocess_image(person, OutputSize.W.value, OutputSize.H.value).unsqueeze(0)
-    garment = preprocess_image(garment, OutputSize.W.value, OutputSize.H.value).unsqueeze(0)
-    mask = pil_to_tensor(mask).unsqueeze(0)
-    densepose = pil_to_tensor(densepose).unsqueeze(0)
+    person_tensor = preprocess_image(person, OutputSize.W.value, OutputSize.H.value).unsqueeze(0)
+    garment_tensor = preprocess_image(garment, OutputSize.W.value, OutputSize.H.value).unsqueeze(0)
+    mask_tensor = pil_to_tensor(mask).unsqueeze(0)
+    densepose_tensor = pil_to_tensor(densepose).unsqueeze(0)
 
     with torch.inference_mode():
         with torch.amp.autocast(device):
-            image = pipeline(
-                image=person.to(device),
-                mask_image=mask.to(device),
-                densepose_image=densepose.to(device),
-                cloth_image=garment.to(device),
+            tryon = pipeline(
+                image=person_tensor.to(device),
+                mask_image=mask_tensor.to(device),
+                densepose_image=densepose_tensor.to(device),
+                cloth_image=garment_tensor.to(device),
                 height=OutputSize.H.value,
                 width=OutputSize.W.value,
                 generator=torch.manual_seed(1996),
                 guidance_scale=1.5,
             ).images[0]
     
-    return image
+    if poisson_blending:
+        tryon = apply_poisson_blending(person, tryon, mask)
+
+    return tryon
 
 
 with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
     title = "## Heatmob Virtual Try-on Demo ♨️"
     gr.Markdown(title)
-    gr.Markdown(f"**👷Model version:** *Navier-1[Beta]-1512-preview*")
-    gr.Markdown(f'**🗂️Supported Category:** Upper Garment.')
-    gr.Markdown(f'**🖥️Supported Resolution:** 384x512.')
+    gr.Markdown(f"**👷Model version:** Navier-1[Beta]-1512-preview")
+    gr.Markdown(f'**🗂️Supported Category:** Upper Garment')
+    gr.Markdown(f'**🖥️Supported Resolution:** 384x512 *(output)*')
     gr.Markdown(f'**💾Training Dataset:** VITON-HD *(downscaled)*')
     with gr.Row():
         with gr.Column():
@@ -140,7 +143,14 @@ with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
             )
             with gr.Row():
                 tryon_button = gr.Button('Press to try-on')
-                tryon_button.click(fn=try_on, inputs=[person_img, garment_img], outputs=[generated_img])
+            with gr.Row():
+                poisson_blending = gr.Checkbox(label='Poisson Blending', info='Image Enhancer (post-processing)')
+
+        tryon_button.click(
+            fn=try_on,
+            inputs=[person_img, garment_img, poisson_blending],
+            outputs=[generated_img]
+        )
 
 
 if __name__ == "__main__":
