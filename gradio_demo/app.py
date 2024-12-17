@@ -17,11 +17,6 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 os.environ['PYTHONBREAKPOINT'] = "0"
 
 
-class GradioImageSize(Enum):
-    WIDTH = 512
-    HEIGHT = 512
-
-
 class OutputSize(Enum):
     W = 384
     H = 512
@@ -92,18 +87,20 @@ def try_on(person_img_path: str, garment_img_path: str):
     return image
 
 
-with gr.Blocks(theme='ParityError/Interstellar') as demo:
-    title = "## Heatmob Virtual Try-on Demo."
+with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
+    title = "## Heatmob Virtual Try-on Demo ♨️"
     gr.Markdown(title)
-    gr.Markdown(f"**Model version:** *Navier-1[Beta]-1512-preview*")
+    gr.Markdown(f"**👷Model version:** *Navier-1[Beta]-1512-preview*")
+    gr.Markdown(f'**🗂️Supported Category:** Upper Garment.')
+    gr.Markdown(f'**🖥️Supported Resolution:** 384x512.')
+    gr.Markdown(f'**💾Training Dataset:** VITON-HD *(downscaled)*')
     with gr.Row():
         with gr.Column():
-            gr.Markdown('#### Person Image')
             person_img = gr.Image(
                 sources=['upload', 'webcam'],
+                label='Person',
                 type='filepath',
-                width=GradioImageSize.WIDTH,
-                height=GradioImageSize.HEIGHT,
+                interactive=True,
             )
             gr.Examples(
                 inputs=person_img,
@@ -118,12 +115,11 @@ with gr.Blocks(theme='ParityError/Interstellar') as demo:
             )
 
         with gr.Column():
-            gr.Markdown('#### Garment Image')
             garment_img = gr.Image(
                 sources=['upload', 'webcam'],
+                label='Garment',
                 type='filepath',
-                width=GradioImageSize.WIDTH,
-                height=GradioImageSize.HEIGHT
+                interactive=True
             )
             gr.Examples(
                 inputs=garment_img,
@@ -138,10 +134,8 @@ with gr.Blocks(theme='ParityError/Interstellar') as demo:
             )
 
         with gr.Column():
-            gr.Markdown('#### Output')
             generated_img = gr.Image(
-                width=GradioImageSize.WIDTH,
-                height=GradioImageSize.HEIGHT,
+                label='Output',
                 interactive=False
             )
             with gr.Row():
