@@ -1,4 +1,4 @@
-from typing import Union, List
+from typing import Union, List, Tuple
 import argparse
 import random
 import string
@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 import PIL
+from PIL import ImageOps
 import torch
 import accelerate
 import torchvision
@@ -20,6 +21,11 @@ from src.models.attention_processor import (
     AttnProcessor2_0 as AttnProcessor
 )
 from src.models.emasc import EMASC
+
+
+def resize_keep_ratio(img: PIL.Image.Image, size: Tuple = (384, 512)) -> PIL.Image.Image:
+    output = ImageOps.fit(img, size)
+    return output
 
 
 # Copied from https://github.com/miccunifi/ladi-vton/blob/master/src/utils/set_seeds.py
