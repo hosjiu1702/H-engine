@@ -9,12 +9,11 @@
 > This codebase is highly developed so everything could be broken accidently.
 
 ## TODO LIST
-- [x] training code *(still under active development)*
-- [x] pipeline code *(still under active development)*
-- [ ] inference code
-- [ ] evaluation
+- [x] training code
+- [x] pipeline code
+- [x] Gradio demo
+- [ ] evaluation code
 - [ ] legacy code (old pipeline)
-- [ ] Gradio demo
 
 ## VTO Models
 We have two approaches to train our model:
@@ -24,7 +23,7 @@ We have two approaches to train our model:
 #### Base U-net
 Two options:
 - `Stable Diffusion 1.5 inpainting`
-- `Paint-by-Example`
+- <strike>`Paint-by-Example`</strike>
 #### VAE
 Because the original pretrained `vae` from Stability AI is not good to preserve human face so we currently choose an [another variant one](https://huggingface.co/stabilityai/sd-vae-ft-mse).
 #### IP-Adapter
@@ -138,3 +137,4 @@ This codebase and many other things get inspired or borrowed from awesome openso
 * [StableVITON](https://github.com/rlawjdghek/StableVITON)
 * [CatVTON](https://github.com/Zheng-Chong/CatVTON)
 * [Diffusers](https://github.com/huggingface/diffusers)
+* [Leffa](https://github.com/franciszzj/Leffa)
