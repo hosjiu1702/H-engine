@@ -50,7 +50,8 @@ def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool):
     Args:
         person_img_path (str): path to the person image.
         garment_img_path (str): path to the garment image.
-    
+        poisson_blending (bool): whether or not to use Poisson Image Blending.
+
     Returns:
         Try-on image
     """
