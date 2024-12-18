@@ -1,8 +1,20 @@
-# Finetune SD1.5 Inpainting  
+# Improve sd1.5 inpainting  
+This project aims to enhance TryOnNet by leveraging Stable Diffusion 1.5 (SD1.5) as the base model, exploring two experimental approaches to improve garment try-on quality and realism.
 
 This experiment contains two cases:  
-1. SD1.5 Inpainting Baseline  
-2. SD1.5 Inpainting + Garment Net  
+Case 1: SD1.5 Inpainting Baseline + Extra_dim + Ip_adapter
+This approach builds on the foundational SD1.5 Inpainting model, further improving its performance using:
+
+Extra_dim: Enhances dimensional awareness for better garment alignment with body shapes and poses.
+Ip_adapter: A specialized module to integrate pose and shape information effectively, ensuring garments fit naturally and adhere to subject-specific contours.
+
+Case 2: SD1.5 Inpainting + GarmentNet
+This approach incorporates GarmentNet, a model designed to explicitly learn garment structures and textures. By combining GarmentNet with SD1.5 Inpainting, the system achieves:
+
+Improved garment texture preservation.
+More accurate mapping of garment features, such as wrinkles, patterns, and edges.
+Enhanced realism in the final try-on results.
+
 
 ## Download Resources 
 
