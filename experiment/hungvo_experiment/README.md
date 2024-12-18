@@ -15,8 +15,8 @@ This experiment aims to enhance TryOnNet by leveraging Stable Diffusion 1.5 (SD1
 ### Case 1: SD1.5 Inpainting Baseline + Extra_dim + Ip_adapter
 This approach builds on the foundational SD1.5 Inpainting model, further improving its performance using:
 
-- ** `Extra_dim` **: Enhances dimensional awareness for better garment alignment (add 1 garment channel).
-- ** `Ip_adapter` **: A specialized module to transfer garment style correctly and learn high-level information effectively, ensuring garments fit naturally and adhere to subject-specific contours.
+- `Extra_dim`: Enhances dimensional awareness for better garment alignment (add 1 garment channel).
+- `Ip_adapter`: A specialized module to transfer garment style correctly and learn high-level information effectively, ensuring garments fit naturally and adhere to subject-specific contours.
 
 ### Case 2: SD1.5 Inpainting + GarmentNet
 This approach incorporates GarmentNet, a model designed to explicitly learn garment structures and textures. By combining GarmentNet with SD1.5 Inpainting, the system achieves:
@@ -148,8 +148,8 @@ wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_s
 
 
 ## TODO List
-- [] Paper
-- [] Gradio demo
+- [ ] Paper
+- [ ] Gradio demo
 - [x] Inference code
 - [x] Model weights
 - [x] Training code
