@@ -60,6 +60,9 @@ class DressCodeDataset(Dataset):
                     dataroot_names.append(dataroot)
 
         if use_dilated_relaxed_mask:
+            """ Apply when the underlying mask generation process
+            could not handle all of inputs from images/ folder.
+            """
             drop_indices = []
             for i, rootpath in enumerate(dataroot_names):
                 query_name = im_names[i]
