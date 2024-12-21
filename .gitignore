@@ -2,6 +2,7 @@ datasets/vitonhd/
 checkpoints/
 wandb/
 results/
+.venv-test/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
