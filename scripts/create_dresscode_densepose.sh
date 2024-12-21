@@ -1,0 +1,1 @@
+python src/dataset/utils.py create_densepose_for_dresscode --base_path=/hosjiu/data/DressCode/lower_body/
