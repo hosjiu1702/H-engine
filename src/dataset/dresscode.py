@@ -1,15 +1,18 @@
-from typing import Text, Union, List
+# Modified from https://github.com/aimagelab/dress-code/blob/main/data/dataset.py
+
+from typing import Text, Union, List, Dict
 from pathlib import Path
 import os
+from os import path as osp
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
 from PIL import Image
 from transformers import CLIPImageProcessor
-from src.utils import is_image
+from src.utils import is_image as is_valid
 
 
-class VITONHDDataset(Dataset):
+class DressCodeDataset(Dataset):
 
     transform = v2.Compose(
         [
@@ -22,58 +25,57 @@ class VITONHDDataset(Dataset):
     def __init__(
             self,
             data_rootpath: Text,
-            use_trainset: bool = True,
-            use_paired_data: bool = True,
+            phase: Text, # train | test
+            category: List[Text] = ['upper_body', 'lower_body', 'dresses'],
+            order: Text = 'paired',
             use_augmentation: bool = False,
             height: int = 1024,
             width: int = 768,
-            use_CLIPVision: bool = True,
             use_dilated_relaxed_mask: bool = False,
     ):
-        super(VITONHDDataset, self).__init__()
+        super(DressCodeDataset, self).__init__()
         self.data_rootpath = data_rootpath
-        self.use_trainset = use_trainset
-        self.use_paired_data = use_paired_data
         self.use_augmentation = use_augmentation
         self.height = height
         self.width = width
-        self.use_CLIPVision = use_CLIPVision
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
 
-        self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
+        im_names = []
+        c_names = []
+        dataroot_names = []
 
-        if use_CLIPVision:
-            self.image_processor = CLIPImageProcessor()
+        for c in category:
+            assert c in ['dresses', 'upper_body', 'lower_body']
 
-        mode = 'train' if self.use_trainset else 'test'
-        datapath = os.path.join(data_rootpath, mode)
-
-        def _get_file_paths(root_dir: Union[Path, Text]) -> List[Path]:
-            return [Path(root_dir, fname) for fname in sorted(os.listdir(root_dir)) if is_image(fname)]
-
-        if mode == 'train':
-            if self.use_paired_data:
-                self.im_paths = _get_file_paths(Path(datapath, 'image')) # person image
-                if self.use_dilated_relaxed_mask:
-                    self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask-v2'))
-                    self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v2'))
-                else:
-                    self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
-                    self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
-                self.c_paths = _get_file_paths(Path(datapath, 'cloth')) # outfit image
-                self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose')) # densepose image
+            dataroot = os.path.join(self.dataroot, c)
+            if phase == 'train':
+                filename = os.path.join(dataroot, f"{phase}_pairs.txt")
             else:
-                raise ValueError('Not support unpaired setting for VITON-HD dataset yet.')
-        else:
-            self.im_paths = _get_file_paths(Path(datapath, 'image')) # person image
-            if self.use_dilated_relaxed_mask:
-                self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask-v2'))
-                self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v2'))
-            else:
-                self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
-                self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
-            self.c_paths = _get_file_paths(Path(datapath, 'cloth')) # outfit image
-            self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose')) # densepose image
+                filename = os.path.join(dataroot, f"{phase}_pairs_{order}.txt")
+            with open(filename, 'r') as f:
+                for line in f.readlines():
+                    im_name, c_name = line.strip().split()
+                    im_names.append(im_name)
+                    c_names.append(c_name)
+                    dataroot_names.append(dataroot)
+
+        if use_dilated_relaxed_mask:
+            drop_indices = []
+            for i, rootpath in enumerate(dataroot_names):
+                query_name = im_names[i]
+                mask_path = osp.join(rootpath, 'mask_v2', query_name)
+                if not osp.isfile(mask_path):
+                    drop_indices.append(i)
+            tmp_im = [im_name for idx, im_name in enumerate(im_names) if idx not in drop_indices]
+            tmp_c = [c_name for idx, c_name in enumerate(c_names) if idx not in drop_indices]
+            tmp_dataroot = [dataroot_name for idx, dataroot_name in enumerate(dataroot_names) if idx not in drop_indices]
+            im_names = tmp_im
+            c_names = tmp_c
+            dataroot_names = tmp_dataroot
+        
+        self.im_names = im_names
+        self.c_names = c_names
+        self.dataroot_names = dataroot_names
 
     def __len__(self):
         return len(self.im_paths)
@@ -93,11 +95,6 @@ class VITONHDDataset(Dataset):
         c = self.image_processor(images=c, return_tensors='pt').pixel_values
         c = c.squeeze(0)
 
-        # Cloth (no CLIP preprocessing)
-        c_raw = Image.open(self.c_paths[index])
-        c_raw = c_raw.resize((self.width, self.height))
-        c_raw = self.transform(c_raw)
-
         # Densepose
         dp = Image.open(self.dp_paths[index])
         origin_dp = dp = dp.resize((self.width, self.height))
@@ -107,11 +104,6 @@ class VITONHDDataset(Dataset):
         mask = Image.open(self.m_paths[index])
         origin_m = mask = mask.resize((self.width, self.height))
         mask = self.totensor(mask.convert('L'))
-        # A dirty snippet code that check if this is a binary matrix
-        # uni_elems = mask.unique()
-        # assert 1. in uni_elems
-        # assert 0. in uni_elems
-        # assert len(uni_elems) == 2
 
         # Masked image (agnostic image)
         masked_img = Image.open(self.agn_paths[index])
@@ -136,9 +128,3 @@ class VITONHDDataset(Dataset):
         })
 
         return item
-
-    @classmethod
-    def preprocess(cls, img: Image.Image, width: int, height: int) -> torch.Tensor:
-        x = img.resize((width, height))
-        x = cls.transform(x)
-        return x
