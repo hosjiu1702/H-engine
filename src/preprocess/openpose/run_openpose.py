@@ -32,7 +32,7 @@ class OpenPose:
         torch.cuda.set_device(gpu_id)
         self.preprocessor = OpenposeDetector()
 
-    def __call__(self, input_image, resolution=384):
+    def __call__(self, input_image, hand_and_face=False, resolution=384):
         torch.cuda.set_device(self.gpu_id)
         if isinstance(input_image, Image.Image):
             input_image = np.asarray(input_image)
@@ -45,7 +45,7 @@ class OpenPose:
             input_image = resize_image(input_image, resolution)
             H, W, C = input_image.shape
             assert (H == 512 and W == 384), 'Incorrect input image shape'
-            pose, detected_map = self.preprocessor(input_image, hand_and_face=False)
+            pose, detected_map = self.preprocessor(input_image, hand_and_face=hand_and_face)
 
             candidate = pose['bodies']['candidate']
             subset = pose['bodies']['subset'][0][:18]
