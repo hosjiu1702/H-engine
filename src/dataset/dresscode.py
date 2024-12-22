@@ -1,6 +1,7 @@
 # Modified from https://github.com/aimagelab/dress-code/blob/main/data/dataset.py
 
 from typing import Text, Union, List, Dict
+import random
 from pathlib import Path
 import os
 from os import path as osp
@@ -11,8 +12,6 @@ from torchvision.transforms import v2
 from PIL import Image
 from transformers import CLIPImageProcessor
 from src.utils import is_image as is_valid
-
-from IPython.core.debugger import Pdb
 
 
 class DressCodeDataset(Dataset):
@@ -84,7 +83,7 @@ class DressCodeDataset(Dataset):
         self.dataroot_names = dataroot_names
 
     def __len__(self):
-        return len(self.im_paths)
+        return len(self.im_names)
 
     def __getitem__(self, index):
         item = {}
@@ -128,11 +127,36 @@ class DressCodeDataset(Dataset):
         dense = self.transform(dense)
 
         item.update({
+            'im_name': im_name,
+            'c_name': c_name,
             'image': img,
             'masked_image': agn,
             'mask': mask,
             'densepose': dense,
-            'cloth_raw': c,
+            'cloth': c,
         })
 
         return item
+
+    def get_random_sample(self) -> Dict[Text, Image.Image]:
+        idx = random.randint(0, len(self.im_names) - 1)
+
+        im_name = self.im_names[idx]
+        c_name = self.c_names[idx]
+        dataroot = self.dataroot_names[idx]
+        
+        c = Image.open(osp.join(dataroot, 'images', c_name)).resize((self.w, self.h))
+        img = Image.open(osp.join(dataroot, 'images', im_name)).resize((self.w, self.h))
+        mask = Image.open(osp.join(dataroot, 'mask_v2', im_name)).resize((self.w, self.h))
+        agn = Image.open(osp.join(dataroot, 'agnostic_v2', im_name)).resize((self.w, self.h))
+        dense = Image.open(osp.join(dataroot, 'dense_modified', im_name)).resize((self.w, self.h))
+        skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name)).resize((self.w, self.h))
+        
+        return {
+            'cloth': c,
+            'image': img,
+            'mask': mask,
+            'agnostic': agn,
+            'dense': dense,
+            'skeleton': skl
+        }
