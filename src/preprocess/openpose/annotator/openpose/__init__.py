@@ -22,7 +22,7 @@ hand_model_path = "https://huggingface.co/lllyasviel/Annotators/resolve/main/han
 face_model_path = "https://huggingface.co/lllyasviel/Annotators/resolve/main/facenet.pth"
 
 
-def draw_pose(pose, H, W, draw_body=True, draw_hand=True, draw_face=True):
+def draw_pose(pose, H, W, draw_body=True, draw_hand=True, draw_face=False):
     bodies = pose['bodies']
     faces = pose['faces']
     hands = pose['hands']
@@ -45,7 +45,7 @@ def draw_pose(pose, H, W, draw_body=True, draw_hand=True, draw_face=True):
 class OpenposeDetector:
     def __init__(self):
         body_modelpath = os.path.join(annotator_ckpts_path, "body_pose_model.pth")
-        # hand_modelpath = os.path.join(annotator_ckpts_path, "hand_pose_model.pth")
+        hand_modelpath = os.path.join(annotator_ckpts_path, "hand_pose_model.pth")
         # face_modelpath = os.path.join(annotator_ckpts_path, "facenet.pth")
 
         if not os.path.exists(body_modelpath):

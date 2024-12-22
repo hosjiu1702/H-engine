@@ -183,25 +183,6 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
     mask = Image.fromarray(inpaint_mask.astype(np.uint8) * 255)
     mask_gray = Image.fromarray(inpaint_mask.astype(np.uint8) * 127)
 
-    tmp = {
-        'inpaint_mask': Image.fromarray(inpaint_mask.astype(np.uint8)),
-        'img': Image.fromarray(img.astype(np.uint8)),
-        'hands_left': hands_left,
-        'hands_right': hands_right,
-        'parser1': parser1,
-        'parser2': parser2,
-        'parser3': parser3,
-        'parser4': parser4,
-        'parser5': parser5,
-        'parser6': parser6,
-        'parser7': parser7,
-        'parser8': parser8,
-        'parser9': parser9,
-        'parser10': parser10,
-        'parser11': parser11,
-        'parser12': parser12,
-        'parser13': parser13,
-        'head_mask': parse_head
-    }
+    tmp = {}
 
     return mask, mask_gray, tmp, parse_head
