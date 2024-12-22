@@ -12,6 +12,8 @@ from PIL import Image
 from transformers import CLIPImageProcessor
 from src.utils import is_image as is_valid
 
+from IPython.core.debugger import Pdb
+
 
 class DressCodeDataset(Dataset):
 
@@ -29,8 +31,8 @@ class DressCodeDataset(Dataset):
         super(DressCodeDataset, self).__init__()
         self.data_rootpath = data_rootpath
         self.use_augmentation = use_augmentation
-        self.height = h
-        self.width = w
+        self.h = h
+        self.w = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
 
         self.transform = v2.Compose(
@@ -48,7 +50,7 @@ class DressCodeDataset(Dataset):
         for c in category:
             assert c in ['dresses', 'upper_body', 'lower_body']
 
-            dataroot = os.path.join(self.dataroot, c)
+            dataroot = os.path.join(self.data_rootpath, c)
             if phase == 'train':
                 filename = os.path.join(dataroot, f"{phase}_pairs.txt")
             else:
@@ -103,11 +105,11 @@ class DressCodeDataset(Dataset):
 
         # mask image
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name))
+        mask = mask.resize((self.w, self.h))
         mask = mask.convert('L')
         mask = mask.point(lambda i: 255 if i > 127 else 0)
         mask = mask.convert('1') # [True, False] array
         mask = np.array(mask, dtype=np.float32) # [0, 1] array
-        mask = mask.resize((self.w, self.h))
         mask = torch.from_numpy(mask)
 
         # agnostic image (masked image)
