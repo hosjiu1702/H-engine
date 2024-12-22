@@ -4,6 +4,7 @@ from typing import Text, Union, List, Dict
 from pathlib import Path
 import os
 from os import path as osp
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
@@ -14,14 +15,6 @@ from src.utils import is_image as is_valid
 
 class DressCodeDataset(Dataset):
 
-    transform = v2.Compose(
-        [
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        ]
-    )
-
     def __init__(
             self,
             data_rootpath: Text,
@@ -29,16 +22,24 @@ class DressCodeDataset(Dataset):
             category: List[Text] = ['upper_body', 'lower_body', 'dresses'],
             order: Text = 'paired',
             use_augmentation: bool = False,
-            height: int = 1024,
-            width: int = 768,
+            h: int = 1024, # height
+            w: int = 768, # weight
             use_dilated_relaxed_mask: bool = False,
     ):
         super(DressCodeDataset, self).__init__()
         self.data_rootpath = data_rootpath
         self.use_augmentation = use_augmentation
-        self.height = height
-        self.width = width
+        self.height = h
+        self.width = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
+
+        self.transform = v2.Compose(
+            [
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+            ]
+        )
 
         im_names = []
         c_names = []
@@ -86,48 +87,50 @@ class DressCodeDataset(Dataset):
     def __getitem__(self, index):
         item = {}
 
-        img_name = str(self.im_paths[index]).split('/')[-1]
-        
-        # Person image
-        img = Image.open(self.im_paths[index])
-        origin_img = img = img.resize((self.width, self.height))
+        im_name = self.im_names[index]
+        c_name = self.c_names[index]
+        dataroot = self.dataroot_names[index]
+
+        # person image
+        img = Image.open(osp.join(dataroot, 'images', im_name))
+        img = img.resize((self.w, self.h))
         img = self.transform(img)
 
-        # Cloth
-        c = Image.open(self.c_paths[index])
-        c = self.image_processor(images=c, return_tensors='pt').pixel_values
-        c = c.squeeze(0)
+        # garment image
+        c = Image.open(osp.join(dataroot, 'images', c_name))
+        c = c.resize((self.w, self.h))
+        c = self.transform(c)
 
-        # Densepose
-        dp = Image.open(self.dp_paths[index])
-        origin_dp = dp = dp.resize((self.width, self.height))
-        dp = self.transform(dp)
+        # mask image
+        mask = Image.open(osp.join(dataroot, 'mask_v2', im_name))
+        mask = mask.convert('L')
+        mask = mask.point(lambda i: 255 if i > 127 else 0)
+        mask = mask.convert('1') # [True, False] array
+        mask = np.array(mask, dtype=np.float32) # [0, 1] array
+        mask = mask.resize((self.w, self.h))
+        mask = torch.from_numpy(mask)
 
-        # Mask
-        mask = Image.open(self.m_paths[index])
-        origin_m = mask = mask.resize((self.width, self.height))
-        mask = self.totensor(mask.convert('L'))
+        # agnostic image (masked image)
+        agn = Image.open(osp.join(dataroot, 'agnostic_v2', im_name))
+        agn = agn.resize((self.w, self.h))
+        agn = self.transform(agn)
 
-        # Masked image (agnostic image)
-        masked_img = Image.open(self.agn_paths[index])
-        origin_agn = masked_img = masked_img.resize((self.width, self.height))
-        masked_img = self.transform(masked_img)
+        # skeleton image
+        skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name))
+        skl = skl.resize((self.w, self.h))
+        skl = self.transform(skl)
+
+        # densepose image
+        dense = Image.open(osp.join(dataroot, 'dense_modified', im_name))
+        dense = dense.resize((self.w, self.h))
+        dense = self.transform(dense)
 
         item.update({
-            'original_image': self.totensor(origin_img),
-            'original_image_path': str(self.im_paths[index]),
-            'original_mask': self.totensor(origin_m),
-            'original_mask_path': str(self.m_paths[index]),
-            'original_masked_image': self.totensor(origin_agn),
-            'original_densepose': self.totensor(origin_dp),
-            'original_cloth_path': str(self.c_paths[index]),
             'image': img,
-            'masked_image': masked_img,
+            'masked_image': agn,
             'mask': mask,
-            'densepose': dp,
-            'cloth_raw': c_raw,
-            'cloth': c,
-            'im_name': img_name
+            'densepose': dense,
+            'cloth_raw': c,
         })
 
         return item
