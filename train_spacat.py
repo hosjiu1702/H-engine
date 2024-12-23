@@ -18,7 +18,7 @@ import argparse
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, ConcatDataset
 from diffusers import DDPMScheduler, AutoencoderKL
 from diffusers.utils import is_wandb_available
 from accelerate import Accelerator
@@ -41,6 +41,7 @@ from src.models.attention_processor import SkipAttnProcessor
 from src.models.autoencoder_kl import AutoencoderKLForEmasc
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
+from src.dataset.dresscode import DressCodeDataset
 from src.utils.training_utils import compute_snr
 
 
@@ -87,9 +88,23 @@ def parse_args():
         default='logs'
     )
     parser.add_argument(
+        '--merge_hd_dc',
+        action='store_true',
+        help='Merge VITON-HD and DressCode to train as an unified training dataset.'
+    )
+    parser.add_argument(
+        '--vitonhd_datapath',
+        type=str,
+        help='Path to root path of VITON-HD dataset.'
+    )
+    parser.add_argument(
+        '--dresscode_datapath',
+        type=str,
+        help='Path to root path of DressCode dataset.'
+    )
+    parser.add_argument(
         '--data_dir',
         type=str,
-        required=True,
         help='Path to the dataset which is used to train model.'
     )
     parser.add_argument(
@@ -369,24 +384,41 @@ def main():
         vars(args)['height'] = args.height // 2
         vars(args)['width'] = args.width // 2
     
-    train_dataset = VITONHDDataset(
-        data_rootpath=args.data_dir,
-        use_trainset=True,
-        use_paired_data=True,
-        use_augmentation=False,
-        height=args.height,
-        width=args.width,
-        use_CLIPVision=True,
-        use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-    )
+    if args.merge_hd_dc:
+        hd_dataset = VITONHDDataset(
+            data_rootpath=args.vitonhd_datapath,
+            use_trainset=True,
+            height=args.height,
+            width=args.width,
+            use_dilated_relaxed_mask=True,
+        )
+        dc_dataset = DressCodeDataset(
+            args.dresscode_datapaths,
+            phase='train',
+            h=args.height,
+            w=args.weight,
+            use_dilated_relaxed_mask=True,
+        )
+        train_dataset = ConcatDataset([hd_dataset, dc_dataset])
+    else:
+        train_dataset = VITONHDDataset(
+            data_rootpath=args.data_dir,
+            use_trainset=True,
+            use_paired_data=True,
+            use_augmentation=False,
+            height=args.height,
+            width=args.width,
+            use_CLIPVision=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+        )
 
-    test_dataset = VITONHDDataset(
-        data_rootpath=args.data_dir,
-        use_trainset=False,
-        height=args.height,
-        width=args.width,
-        use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-    )
+        test_dataset = VITONHDDataset(
+            data_rootpath=args.data_dir,
+            use_trainset=False,
+            height=args.height,
+            width=args.width,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+        )
 
     if args.use_subset:
         # get only first `num_subset_samples` samples
