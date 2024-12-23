@@ -71,7 +71,7 @@ def create_densepose_for_dresscode(base_path: Text):
     print(f'ERROR_LIST: {ERROR_FILENAME}')
 
 
-def create_skeleton_for_dresscode(base_path: Text):
+def create_skeleton_for_dresscode(base_path: Text, overwrite=False):
     NUMBER_OF_ERRORS = 0
     ERROR_FILENAME = []
     target_folder = 'skeleton_modified'
@@ -83,13 +83,13 @@ def create_skeleton_for_dresscode(base_path: Text):
         if int(indicator_idx) == IMAGE_INDICATOR_INDEX:
             with Image.open(file_path) as image:
                 save_path = osp.join(base_path, target_folder, file_name)
-                if os.path.isfile(save_path):
+                if os.path.isfile(save_path) and not overwrite:
                     print(f'IGNORE: {save_path}')
                     continue
                 try:
                     skeleton = openpose(image)[1]
                     skeleton = Image.fromarray(skeleton)
-                    skeleton.save(save_path)
+                    skeleton.save(save_path, quality=100, subsampling=0)
                 except IndexError:
                     NUMBER_OF_ERRORS += 1
                     ERROR_FILENAME.append(file_path)
