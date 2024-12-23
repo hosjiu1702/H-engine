@@ -393,7 +393,7 @@ def main():
             use_dilated_relaxed_mask=True,
         )
         dc_dataset = DressCodeDataset(
-            args.dresscode_datapaths,
+            args.dresscode_datapath,
             phase='train',
             h=args.height,
             w=args.weight,
