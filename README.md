@@ -13,7 +13,7 @@
 - [x] pipeline code
 - [x] Gradio demo
 - [ ] evaluation code
-- [ ] legacy code (old pipeline)
+- [x] <strike>legacy code (old pipeline)</strike>
 
 ## VTO Models
 We have two approaches to train our model:
