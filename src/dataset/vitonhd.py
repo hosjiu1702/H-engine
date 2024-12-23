@@ -53,27 +53,27 @@ class VITONHDDataset(Dataset):
 
         if mode == 'train':
             if self.use_paired_data:
-                self.im_paths = _get_file_paths(Path(datapath, 'image')) # person image
+                self.im_paths = _get_file_paths(Path(datapath, 'image'))
                 if self.use_dilated_relaxed_mask:
                     self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask-v2'))
                     self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v2'))
                 else:
-                    self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
-                    self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
-                self.c_paths = _get_file_paths(Path(datapath, 'cloth')) # outfit image
-                self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose')) # densepose image
+                    self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask'))
+                    self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2'))
+                self.c_paths = _get_file_paths(Path(datapath, 'cloth'))
+                self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose'))
             else:
                 raise ValueError('Not support unpaired setting for VITON-HD dataset yet.')
         else:
-            self.im_paths = _get_file_paths(Path(datapath, 'image')) # person image
+            self.im_paths = _get_file_paths(Path(datapath, 'image'))
             if self.use_dilated_relaxed_mask:
                 self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask-v2'))
                 self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v2'))
             else:
-                self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask')) # mask (outfit)
-                self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2')) # masked person image
-            self.c_paths = _get_file_paths(Path(datapath, 'cloth')) # outfit image
-            self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose')) # densepose image
+                self.m_paths = _get_file_paths(Path(datapath, 'agnostic-mask'))
+                self.agn_paths = _get_file_paths(Path(datapath, 'agnostic-v3.2'))
+            self.c_paths = _get_file_paths(Path(datapath, 'cloth'))
+            self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose'))
 
     def __len__(self):
         return len(self.im_paths)
@@ -107,11 +107,6 @@ class VITONHDDataset(Dataset):
         mask = Image.open(self.m_paths[index])
         origin_m = mask = mask.resize((self.width, self.height))
         mask = self.totensor(mask.convert('L'))
-        # A dirty snippet code that check if this is a binary matrix
-        # uni_elems = mask.unique()
-        # assert 1. in uni_elems
-        # assert 0. in uni_elems
-        # assert len(uni_elems) == 2
 
         # Masked image (agnostic image)
         masked_img = Image.open(self.agn_paths[index])
@@ -119,20 +114,21 @@ class VITONHDDataset(Dataset):
         masked_img = self.transform(masked_img)
 
         item.update({
+            'im_name': img_name,
+            'c_name': '',
             'original_image': self.totensor(origin_img),
-            'original_image_path': str(self.im_paths[index]),
-            'original_mask': self.totensor(origin_m),
-            'original_mask_path': str(self.m_paths[index]),
-            'original_masked_image': self.totensor(origin_agn),
-            'original_densepose': self.totensor(origin_dp),
-            'original_cloth_path': str(self.c_paths[index]),
             'image': img,
             'masked_image': masked_img,
             'mask': mask,
             'densepose': dp,
             'cloth_raw': c_raw,
-            'cloth': c,
-            'im_name': img_name
+            # 'original_image_path': str(self.im_paths[index]),
+            # 'original_mask': self.totensor(origin_m),
+            # 'original_mask_path': str(self.m_paths[index]),
+            # 'original_masked_image': self.totensor(origin_agn),
+            # 'original_densepose': self.totensor(origin_dp),
+            # 'original_cloth_path': str(self.c_paths[index]),
+            # 'cloth': c,
         })
 
         return item

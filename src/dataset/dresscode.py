@@ -34,6 +34,7 @@ class DressCodeDataset(Dataset):
         self.w = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
 
+        self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
         self.transform = v2.Compose(
             [
                 v2.ToImage(),
@@ -95,6 +96,7 @@ class DressCodeDataset(Dataset):
         # person image
         img = Image.open(osp.join(dataroot, 'images', im_name))
         img = img.resize((self.w, self.h))
+        clone_img = img.copy()
         img = self.transform(img)
 
         # garment image
@@ -109,6 +111,7 @@ class DressCodeDataset(Dataset):
         mask = mask.point(lambda i: 255 if i > 127 else 0)
         mask = mask.convert('1') # [True, False] array
         mask = np.array(mask, dtype=np.float32) # [0, 1] array
+        mask = mask[None] # expand one more dimension for channel
         mask = torch.from_numpy(mask)
 
         # agnostic image (masked image)
@@ -129,11 +132,12 @@ class DressCodeDataset(Dataset):
         item.update({
             'im_name': im_name,
             'c_name': c_name,
+            'original_image': self.totensor(clone_img),
             'image': img,
             'masked_image': agn,
             'mask': mask,
             'densepose': dense,
-            'cloth': c,
+            'cloth_raw': c,
         })
 
         return item
