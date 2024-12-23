@@ -396,7 +396,7 @@ def main():
             args.dresscode_datapath,
             phase='train',
             h=args.height,
-            w=args.weight,
+            w=args.width,
             use_dilated_relaxed_mask=True,
         )
         train_dataset = ConcatDataset([hd_dataset, dc_dataset])
