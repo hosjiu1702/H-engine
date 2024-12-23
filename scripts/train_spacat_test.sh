@@ -3,13 +3,15 @@ export MIXED_PRECISION_TRAINING='bf16'
 export NUM_GPUS=1
 export NUM_NODES=1
 export MAIN_PROCESS_PORT=29505
-export DEVICE=3
-export SNR_GAMMA=5
-export PROJECT_NAME='MIN_SNR_GAMMA'
+export DEVICE=0
+export SNR_GAMMA=2
+export DATA_DIR=datasets/vitonhd
+export PROJECT_NAME='Finetune-VTO'
+export ENABLE_TRACKER=false
 
 CUDA_VISIBLE_DEVICES=$DEVICE python -u -m accelerate.commands.launch --main_process_port=$MAIN_PROCESS_PORT --mixed_precision=$MIXED_PRECISION_TRAINING --num_processes=$NUM_GPUS --num_machines=$NUM_NODES --dynamo_backend='no' \
 train_spacat.py \
---data_dir=datasets/vitonhd \
+--data_dir=$DATA_DIR \
 --use_subset \
 --num_subset_samples=1000 \
 --downscale \
@@ -24,9 +26,9 @@ train_spacat.py \
 --num_train_epochs=100 \
 --max_train_steps=250000 \
 --checkpointing_steps=10000 \
---validation_steps=1000 \
+--validation_steps=4 \
 --lr=1e-5 \
---use_tracker=true \
+--use_tracker=$ENABLE_TRACKER \
 --project_name=$PROJECT_NAME \
 --wandb_name_run=gamma-${SNR_GAMMA}
 --save
