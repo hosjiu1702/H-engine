@@ -385,21 +385,38 @@ def main():
         vars(args)['width'] = args.width // 2
     
     if args.merge_hd_dc:
-        hd_dataset = VITONHDDataset(
+        # VITON-HD
+        hd_train_dataset = VITONHDDataset(
             data_rootpath=args.vitonhd_datapath,
             use_trainset=True,
             height=args.height,
             width=args.width,
             use_dilated_relaxed_mask=True,
         )
-        dc_dataset = DressCodeDataset(
+        hd_test_dataset = VITONHDDataset(
+            data_rootpath=args.vitonhd_datapath,
+            use_trainset=False,
+            height=args.height,
+            width=args.width,
+            use_dilated_relaxed_mask=True,
+        )
+        # DRESSCODE
+        dc_train_dataset = DressCodeDataset(
             args.dresscode_datapath,
             phase='train',
             h=args.height,
             w=args.width,
             use_dilated_relaxed_mask=True,
         )
-        train_dataset = ConcatDataset([hd_dataset, dc_dataset])
+        dc_test_dataset = DressCodeDataset(
+            args.dresscode_datapath,
+            phase='train',
+            h=args.height,
+            w=args.width,
+            use_dilated_relaxed_mask=True,
+        )
+        train_dataset = ConcatDataset([hd_train_dataset, dc_train_dataset])
+        test_dataset = ConcatDataset([hd_test_dataset, dc_test_dataset])
     else:
         train_dataset = VITONHDDataset(
             data_rootpath=args.data_dir,
