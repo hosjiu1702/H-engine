@@ -107,6 +107,8 @@ class VITONHDDataset(Dataset):
         mask = Image.open(self.m_paths[index])
         origin_m = mask = mask.resize((self.width, self.height))
         mask = self.totensor(mask.convert('L'))
+        mask[mask>0.5] = 1.
+        mask[mask<0.5] = 0.
 
         # Masked image (agnostic image)
         masked_img = Image.open(self.agn_paths[index])
