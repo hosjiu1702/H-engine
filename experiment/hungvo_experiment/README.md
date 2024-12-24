@@ -118,7 +118,7 @@ wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_s
 ```
 ### 2. SD1.5 Inpainting + GarmentNet:
 ```
-    accelerate launch train_stablediffusion_inpaint_with_cloth_channel_ref_without_cloth_latent.py \
+  accelerate launch train_stablediffusion_inpaint_with_cloth_channel_ref_without_cloth_latent.py \
   --pretrained_model_name_or_path="/path_to/stable-diffusion-v1-5/" \
   --pretrained_vae_model_path="/path_to/sd-vae-ft-mse/" \
   --pretrained_adapter_model_path="/path_to/IP-Adapter/ip-adapter-plus_sd15.bin" \
@@ -139,7 +139,7 @@ wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_s
 ## Inference
 ### 1. SD1.5 Inpainting Baseline + Extra_dim + Ip_adapter:
 ```
-  python train_stablediffusion_inpaint_with_cloth_channel.py --validation_image "dataset/VITON-HD-toy-3/masked_cloth/00008_00.jpg" --validation_prompt "" --validation_mask "VITON-HD-toy-medium/example/mask_1.jpg" --validation_masked_image "VITON-HD-toy-medium/image/00000_00.jpg" 
+  python test_stablediffusion_inpaint_with_cloth_channel.py --validation_image "dataset/VITON-HD-toy-3/masked_cloth/00008_00.jpg" --validation_prompt "" --validation_mask "VITON-HD-toy-medium/example/mask_1.jpg" --validation_masked_image "VITON-HD-toy-medium/image/00000_00.jpg" 
 ```
 ### 2. SD1.5 Inpainting + GarmentNet:
 ```
@@ -151,5 +151,5 @@ wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_s
 - [ ] Paper
 - [ ] Gradio demo
 - [x] Inference code
-- [x] Model weights
+- [ ] Model weights
 - [x] Training code
