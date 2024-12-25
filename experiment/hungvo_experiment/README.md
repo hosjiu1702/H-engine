@@ -26,7 +26,7 @@ This approach incorporates GarmentNet, a model designed to explicitly learn garm
 ## Structure 
 ### 1. Dataset preparation
 ```
-├── VITON-HD   
+├── VITON-HD | DressCode
 |      ├── agnostic-mask
 │      |    ├── [000006_00.jpg | 000008_00.jpg | ...]
 |      ├── cloth
@@ -99,7 +99,8 @@ wget https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-inpainting/tr
 
 ### Garment-net
 ```bash
-wget https://huggingface.co/ShineChen1024/MagicClothing/resolve/main/stable_ckpt/garment_extractor.safetensors
+wget https://huggingface.co/ShineChen1024/MagicClothing/resolve/main/stable_ckpt/garment_extractor.safetensors  (VITON-HD)
+wget https://huggingface.co/levihsu/OOTDiffusion/resolve/main/checkpoints/ootd/ootd_dc/checkpoint-36000/unet_garm/diffusion_pytorch_model.safetensors (DressCode)
 ```
 
 ### IP Adapter  
