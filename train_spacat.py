@@ -410,7 +410,7 @@ def main():
         )
         dc_test_dataset = DressCodeDataset(
             args.dresscode_datapath,
-            phase='train',
+            phase='test',
             h=args.height,
             w=args.width,
             use_dilated_relaxed_mask=True,
@@ -518,6 +518,7 @@ def main():
 
     global_steps = 0
     rand_name = generate_rand_chars()
+    test_batch = next(iter(test_dataloader))
     for epoch in range(0, args.num_train_epochs):
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
@@ -617,7 +618,7 @@ def main():
                                 # not using in backward pass
                                 with torch.amp.autocast(device.type):
                                     """ 1st test batch. """
-                                    batch = next(iter(test_dataloader))
+                                    batch = test_batch
                                     images = pipe(
                                         image=batch['image'].to(device.type, dtype=weight_dtype),
                                         mask_image=batch['mask'].to(device.type, dtype=weight_dtype),
