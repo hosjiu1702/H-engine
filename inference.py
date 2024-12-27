@@ -128,7 +128,7 @@ if __name__ == '__main__':
     save_dir = osp.join(args.output_dir, f'{args.dataset_name}_{args.order}', f'{ckpt_name}')
     os.makedirs(save_dir, exist_ok=True)
     print(f'Generating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
-    for idx, batch in tqdm(enumerate(test_dataloader)):
+    for batch in tqdm(test_dataloader):
         with torch.inference_mode():
             with torch.amp.autocast(args.device):
                 images = pipeline(
