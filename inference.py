@@ -127,7 +127,7 @@ if __name__ == '__main__':
     ckpt_name = args.model_path.split('/')[-1]
     save_dir = osp.join(args.output_dir, f'{args.dataset_name}_{args.order}', f'{ckpt_name}')
     os.makedirs(save_dir, exist_ok=True)
-    print(f'Generating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
+    print(f'\nGenerating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
     for batch in tqdm(test_dataloader):
         with torch.inference_mode():
             with torch.amp.autocast(args.device):
@@ -142,7 +142,7 @@ if __name__ == '__main__':
                 ).images
                 for img, name in zip(images, batch['im_name']):
                     img.save(osp.join(save_dir, f'{name}.png'))
-    print('Generation Done.\n')
+    print('\nGeneration Done.\n')
 
     if args.eval:
         # FID
@@ -157,7 +157,7 @@ if __name__ == '__main__':
         if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
             make_custom_stats(dataset_name=args.dataset_name, dataset_path=dataset_path)
 
-        print(f'Compute FID score for [{ckpt_name}]\n')
+        print(f'\nCompute FID score for [{ckpt_name}]\n')
         fid_score = fid.compute_fid(
             fdir1=save_dir,
             dataset_name=args.dataset_name,
