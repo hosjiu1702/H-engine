@@ -43,8 +43,8 @@ def parse_args():
     parser.add_argument(
         '--order',
         type=str,
-        default='unpair',
-        help='Pair or Unpaired setting ("pair" | "unpair")'
+        default='paired',
+        help='Pair or Unpaired setting ("paired" | "unpaired")'
     )
     parser.add_argument(
         '--device',
