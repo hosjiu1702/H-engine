@@ -3,6 +3,8 @@ import argparse
 import random
 import string
 import os
+from os import path as osp
+import shutil
 from pathlib import Path
 import numpy as np
 from tqdm import tqdm
@@ -15,6 +17,7 @@ from torchvision.transforms.functional import pil_to_tensor
 from einops import rearrange
 from matplotlib import pyplot as plt
 from diffusers import AutoencoderKL
+from cleanfid import fid
 
 from src.models.attention_processor import (
     SkipAttnProcessor,
@@ -174,3 +177,36 @@ def is_image(filename: str) -> bool:
     if file_ext in VALID_IMAGE_EXTENSION:
         return True
     return False
+
+
+# Adapts from Ladi-Vton repo
+def make_custom_stats(dataset_name: str, dataset_path: str):
+    CATEGORIES = ['lower_body', 'upper_body', 'dresses']
+    if dataset_name == 'dresscode':
+        dresscode_filesplit = os.path.join(dataset_path, f"test_pairs_paired.txt")
+        with open(dresscode_filesplit, 'r') as f:
+            lines = f.read().splitlines()
+        paths = [
+            osp.join(dataset_path, category, 'images', line.strip().split()[0]) for line in lines for
+            category in CATEGORIES if
+            osp.exists(osp.join(dataset_path, category, 'images', line.strip().split()[0]))
+        ]
+        tmp_folder = f"/tmp/dresscode"
+        os.makedirs(tmp_folder, exist_ok=True)
+        for path in tqdm(paths):
+            shutil.copy(path, tmp_folder)
+        fid.make_custom_stats(
+            name="dresscode",
+            fdir=tmp_folder,
+            mode="clean",
+            verbose=True
+        )
+    elif dataset_name == 'vitonhd':
+        fid.make_custom_stats(
+            name="vitonhd",
+            fdir=os.path.join(dataset_path, 'test', 'image'),
+            mode="clean",
+            verbose=True
+        )
+    else:
+        raise ValueError(f'{dataset_name} is not supported.')
