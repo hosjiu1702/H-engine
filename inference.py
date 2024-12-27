@@ -95,7 +95,7 @@ if __name__ == '__main__':
     table.field_names = ['Model', 'FID']
 
     unet, vae, scheduler = load_model(args.model_path, dtype=torch.float16)
-    pipeline = TryOnPipeline(unet, vae, scheduler).to(args.device)
+    pipeline = TryOnPipeline(unet=unet, vae=vae, scheduler=scheduler).to(args.device)
     if args.dataset_name == 'vitonhd':
         test_set = VITONHDDataset(
             args.vitonhd_datapath,

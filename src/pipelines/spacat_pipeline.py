@@ -167,8 +167,8 @@ class TryOnPipeline(
 
     def __init__(
         self,
-        vae: Union[AutoencoderKLForEmasc],
         unet: UNet2DConditionModel,
+        vae: Union[AutoencoderKLForEmasc],
         scheduler: KarrasDiffusionSchedulers,
         text_encoder: CLIPTextModel = None,
         tokenizer: CLIPTokenizer = None,
