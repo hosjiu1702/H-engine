@@ -18,7 +18,7 @@ PROJECT_ROOT_PATH = get_project_root()
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Create a folder of generated images from pretrained vto model on a given dataset set.')
+    parser = argparse.ArgumentParser(description='Script to eval trained models.')
     parser.add_argument(
         '--model_path',
         nargs='+',
