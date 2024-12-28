@@ -180,7 +180,13 @@ if __name__ == '__main__':
             )
 
             table.add_row([ckpt_name, fid_score])
-        
+
+        del unet
+        del vae
+        del scheduler
+        del pipeline
+        torch.cuda.empty_cache()
+
     print(f'\n{table}')
 
     if args.save_metrics_to_file:
