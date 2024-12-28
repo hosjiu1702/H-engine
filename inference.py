@@ -169,7 +169,7 @@ if __name__ == '__main__':
             if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
                 make_custom_stats(dataset_name=args.dataset_name, dataset_path=dataset_path)
 
-            print(f'\nCompute FID score for [{ckpt_name}]\n')
+            print(f'Compute FID score for [{ckpt_name}]\n')
             fid_score = fid.compute_fid(
                 fdir1=save_dir,
                 dataset_name=args.dataset_name,
@@ -181,7 +181,7 @@ if __name__ == '__main__':
 
             table.add_row([ckpt_name, fid_score])
         
-    print(f'\n{table}\n')
+    print(f'\n{table}')
 
     if args.save_metrics_to_file:
         model_name = model_path.split('/')[-2]
@@ -190,4 +190,4 @@ if __name__ == '__main__':
         file = osp.join(save_dir, f'{model_name}.txt')
         with open(file, 'w') as f:
             f.write(table.get_string())
-        print(f'\n Save metrics to {file}')
+        print(f'Saved metrics to {file}\n')
