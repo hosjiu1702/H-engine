@@ -180,7 +180,7 @@ if __name__ == '__main__':
 
             table.add_row([ckpt_name, fid_score])
         
-    print(table)
+    print(f'\n{table}')
 
     if args.save_metrics_to_file:
         model_name = model_path.split('/')[-2]
