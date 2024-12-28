@@ -185,7 +185,7 @@ if __name__ == '__main__':
 
     if args.save_metrics_to_file:
         model_name = model_path.split('/')[-2]
-        save_dir = osp.join(PROJECT_ROOT_PATH, 'tmp', 'metrics')
+        save_dir = osp.join(PROJECT_ROOT_PATH, 'tmp', 'metrics', args.dataset_name)
         os.makedirs(save_dir, exist_ok=True)
         file = osp.join(save_dir, f'{model_name}.txt')
         with open(file, 'w') as f:
