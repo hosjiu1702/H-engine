@@ -21,7 +21,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Script to eval trained models.')
     parser.add_argument(
         '--model_path',
-        nargs='+',
+        type=lambda x: x.split(" "),
         help='Path to model folder.'
     )
     parser.add_argument(
