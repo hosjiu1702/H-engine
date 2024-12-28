@@ -1,3 +1,4 @@
+from typing import List
 from os import path as osp
 import os
 import argparse
@@ -10,15 +11,17 @@ from src.models.utils import load_model
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
 from src.dataset.dresscode import DressCodeDataset
-from src.utils import make_custom_stats
+from src.utils import make_custom_stats, get_project_root
+
+
+PROJECT_ROOT_PATH = get_project_root()
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Create a folder of generated images from pretrained vto model on a given dataset set.')
     parser.add_argument(
         '--model_path',
-        type=str,
-        required=True,
+        nargs='+',
         help='Path to model folder.'
     )
     parser.add_argument(
@@ -84,6 +87,10 @@ def parse_args():
         action='store_true',
         help='Whether or not to evaluate model on the given dataset.'
     )
+    parser.add_argument(
+        '--save_metrics_to_file',
+        action='store_true'
+    )
 
     return parser.parse_args()
 
@@ -94,79 +101,92 @@ if __name__ == '__main__':
     table = PrettyTable()
     table.field_names = ['Model', 'FID']
 
-    unet, vae, scheduler = load_model(args.model_path, dtype=torch.float16)
-    pipeline = TryOnPipeline(unet=unet, vae=vae, scheduler=scheduler).to(args.device)
-    if args.dataset_name == 'vitonhd':
-        test_set = VITONHDDataset(
-            args.vitonhd_datapath,
-            use_trainset=False,
-            height=args.height,
-            width=args.width,
-            use_dilated_relaxed_mask=True
-        )
-    elif args.dataset_name == 'dresscode':
-        test_set = DressCodeDataset(
-            args.dresscode_datapath,
-            phase='test',
-            order=args.order,
-            h=args.height,
-            w=args.width,
-            use_dilated_relaxed_mask=True
-        )
-    else:
-        raise ValueError('Unsupported dataset. Allowed Datasets are ("vitonhd", "dresscode").')
-    
-    test_dataloader = DataLoader(
-        test_set,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.num_workers,
-        pin_memory=True
-    )
+    assert isinstance(args.model_path, List)
 
-    ckpt_name = args.model_path.split('/')[-1]
-    save_dir = osp.join(args.output_dir, f'{args.dataset_name}_{args.order}', f'{ckpt_name}')
-    os.makedirs(save_dir, exist_ok=True)
-    print(f'\nGenerating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
-    for batch in tqdm(test_dataloader):
-        with torch.inference_mode():
-            with torch.amp.autocast(args.device):
-                images = pipeline(
-                    image=batch['image'].to(args.device),
-                    mask_image=batch['mask'].to(args.device),
-                    densepose_image=batch['densepose'].to(args.device),
-                    cloth_image=batch['cloth_raw'].to(args.device),
-                    height=args.height,
-                    width=args.width,
-                    guidance_scale=1.5
-                ).images
-                for img, name in zip(images, batch['im_name']):
-                    img.save(osp.join(save_dir, f'{name}.png'))
-    print('\nGeneration Done.\n')
-
-    if args.eval:
-        # FID
+    # *model_path* path argument should follow format "ROOT/../MODEL_NAME/CKPT_NAME"
+    for model_path in args.model_path:
+        unet, vae, scheduler = load_model(model_path, dtype=torch.float16)
+        pipeline = TryOnPipeline(unet=unet, vae=vae, scheduler=scheduler).to(args.device)
         if args.dataset_name == 'vitonhd':
-            dataset_path = args.vitonhd_datapath
+            test_set = VITONHDDataset(
+                args.vitonhd_datapath,
+                use_trainset=False,
+                height=args.height,
+                width=args.width,
+                use_dilated_relaxed_mask=True
+            )
         elif args.dataset_name == 'dresscode':
-            dataset_path = args.dresscode_datapath
+            test_set = DressCodeDataset(
+                args.dresscode_datapath,
+                phase='test',
+                order=args.order,
+                h=args.height,
+                w=args.width,
+                use_dilated_relaxed_mask=True
+            )
         else:
-            raise ValueError('Supported Datasets: VITON-HD, DressCode')
+            raise ValueError('Unsupported dataset. Allowed Datasets are ("vitonhd", "dresscode").')
         
-        # makes dataset statistics
-        if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
-            make_custom_stats(dataset_name=args.dataset_name, dataset_path=dataset_path)
-
-        print(f'\nCompute FID score for [{ckpt_name}]\n')
-        fid_score = fid.compute_fid(
-            fdir1=save_dir,
-            dataset_name=args.dataset_name,
-            mode='clean',
-            dataset_split='custom',
-            verbose=True,
-            use_dataparallel=False
+        test_dataloader = DataLoader(
+            test_set,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=args.num_workers,
+            pin_memory=True
         )
 
-        table.add_row([ckpt_name, fid_score])
-    
+        ckpt_name = model_path.split('/')[-1]
+        save_dir = osp.join(args.output_dir, f'{args.dataset_name}_{args.order}', f'{ckpt_name}')
+        os.makedirs(save_dir, exist_ok=True)
+        print(f'\nGenerating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
+        for batch in tqdm(test_dataloader):
+            with torch.inference_mode():
+                with torch.amp.autocast(args.device):
+                    images = pipeline(
+                        image=batch['image'].to(args.device),
+                        mask_image=batch['mask'].to(args.device),
+                        densepose_image=batch['densepose'].to(args.device),
+                        cloth_image=batch['cloth_raw'].to(args.device),
+                        height=args.height,
+                        width=args.width,
+                        guidance_scale=1.5
+                    ).images
+                    for img, name in zip(images, batch['im_name']):
+                        img.save(osp.join(save_dir, f'{name}.png'))
+        print('\nGeneration Done.\n')
+
+        if args.eval:
+            # FID
+            if args.dataset_name == 'vitonhd':
+                dataset_path = args.vitonhd_datapath
+            elif args.dataset_name == 'dresscode':
+                dataset_path = args.dresscode_datapath
+            else:
+                raise ValueError('Supported Datasets: VITON-HD, DressCode')
+            
+            # makes dataset statistics
+            if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
+                make_custom_stats(dataset_name=args.dataset_name, dataset_path=dataset_path)
+
+            print(f'\nCompute FID score for [{ckpt_name}]\n')
+            fid_score = fid.compute_fid(
+                fdir1=save_dir,
+                dataset_name=args.dataset_name,
+                mode='clean',
+                dataset_split='custom',
+                verbose=True,
+                use_dataparallel=False
+            )
+
+            table.add_row([ckpt_name, fid_score])
+        
     print(table)
+
+    if args.save_metrics_to_file:
+        model_name = model_path.split('/')[-2]
+        save_dir = osp.join(PROJECT_ROOT_PATH, 'tmp', 'metrics')
+        os.makedirs(save_dir, exist_ok=True)
+        file = osp.join(save_dir, f'{model_name}.txt')
+        with open(file, 'w') as f:
+            f.write(table.get_string())
+        print(f'\n Save metrics to {file}')
