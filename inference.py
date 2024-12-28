@@ -138,7 +138,8 @@ if __name__ == '__main__':
         ckpt_name = model_path.split('/')[-1]
         save_dir = osp.join(args.output_dir, f'{args.dataset_name}_{args.order}', f'{ckpt_name}')
         os.makedirs(save_dir, exist_ok=True)
-        print(f'\nGenerating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
+        print(f'\nCKPT: {ckpt_name}')
+        print(f'Generating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
         for batch in tqdm(test_dataloader):
             with torch.inference_mode():
                 with torch.amp.autocast(args.device):
@@ -180,7 +181,7 @@ if __name__ == '__main__':
 
             table.add_row([ckpt_name, fid_score])
         
-    print(f'\n{table}')
+    print(f'\n{table}\n')
 
     if args.save_metrics_to_file:
         model_name = model_path.split('/')[-2]
