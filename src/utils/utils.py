@@ -13,7 +13,7 @@ from PIL import ImageOps
 import torch
 import accelerate
 import torchvision
-from torchvision.transforms.functional import pil_to_tensor
+from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from einops import rearrange
 from matplotlib import pyplot as plt
 from diffusers import AutoencoderKL
@@ -210,3 +210,11 @@ def make_custom_stats(dataset_name: str, dataset_path: str):
         )
     else:
         raise ValueError(f'{dataset_name} is not supported.')
+
+
+def mask2agn(mask: np.array, body: PIL.Image.Image) -> PIL.Image.Image:
+    mask = torch.from_numpy(mask)
+    body_tensor = pil_to_tensor(body)
+    agnostic_tensor = torch.where(mask, torch.ones_like(body_tensor) * 127, body_tensor)
+    agn_img = to_pil_image(agnostic_tensor)
+    return agn_img
