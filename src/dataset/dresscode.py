@@ -83,6 +83,9 @@ class DressCodeDataset(Dataset):
         self.c_names = c_names
         self.dataroot_names = dataroot_names
 
+    def get_random_image(self):
+        return self.get_random_sample()['image']
+        
     def __len__(self):
         return len(self.im_names)
 
