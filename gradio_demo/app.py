@@ -10,7 +10,7 @@ from torchvision.transforms.functional import pil_to_tensor
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.models.utils import download_model, load_model, get_densepose_map, preprocess_image, apply_poisson_blending
 from src.utils.mask_v2 import Maskerv2 as Masker
-from src.utils import get_project_root
+from src.utils import get_project_root, mask2agn
 
 
 PROJECT_ROOT_PATH = get_project_root()
@@ -27,13 +27,17 @@ class OutputSize(Enum):
 masker = Masker()
 
 # Download model
-model_path = download_model(
-    repo_id='bui/Navier-1',
-    ckpt_name='ckpt-20000-1512-preview',
-    model_name='Navier-1',
-    token=os.getenv('HF_TOKEN')
-)
+# model_path = download_model(
+#     repo_id='bui/Navier-1',
+#     ckpt_name='ckpt-20000-1512-preview',
+#     model_name='Navier-1',
+#     token=os.getenv('HF_TOKEN')
+# )
+model_path = osp.join(PROJECT_ROOT_PATH, 'results/navier-1-1512/ckpt-132000')
+model_path2 = osp.join(PROJECT_ROOT_PATH, 'checkpoints/navier-1/navier-1-beta-1512-preview/ckpt-20000-1512-preview')
+
 unet, vae, scheduler = load_model(model_path)
+unet2, _, _ = load_model(model_path2)
 
 # Load diffusion try-on pipeline
 pipeline = TryOnPipeline(
@@ -42,8 +46,14 @@ pipeline = TryOnPipeline(
     scheduler=scheduler
 ).to(device)
 
+pipeline2 = TryOnPipeline(
+    unet=unet2,
+    vae=vae,
+    scheduler=scheduler
+).to(device)
 
-def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool):
+
+def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool, category: str, model_name: str):
     """
     Main function to run try-on process.
     
@@ -64,7 +74,11 @@ def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool):
     garment = ImageOps.fit(garment, size=(OutputSize.W.value, OutputSize.H.value))
 
     # Get mask
-    mask = masker.create_mask(person)
+    if category == 'overall':
+        category = 'dresses'
+    else:
+        category += '_body'
+    mask = masker.create_mask(person, category)
 
     # Get densepose
     densepose = get_densepose_map(person_img_path, size=(OutputSize.W.value, OutputSize.H.value))
@@ -77,7 +91,8 @@ def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool):
 
     with torch.inference_mode():
         with torch.amp.autocast(device):
-            tryon = pipeline(
+            pipe = pipeline if model_name == '1512' else pipeline2
+            tryon = pipe(
                 image=person_tensor.to(device),
                 mask_image=mask_tensor.to(device),
                 densepose_image=densepose_tensor.to(device),
@@ -97,10 +112,10 @@ def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool):
 with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
     title = "## Heatmob Virtual Try-on Demo ♨️"
     gr.Markdown(title)
-    gr.Markdown(f"**👷Model version:** Navier-1[Beta]-1512-preview")
-    gr.Markdown(f'**🗂️Supported Category:** Upper Garment')
+    gr.Markdown(f"**👷Model version:** Navier-1[Beta]")
+    gr.Markdown(f'**🗂️Supported Category:** Upper-Body, Lower-Body, Dresses')
     gr.Markdown(f'**🖥️Supported Resolution:** 384x512 *(output)*')
-    gr.Markdown(f'**💾Training Dataset:** VITON-HD *(downscaled)*')
+    gr.Markdown(f'**💾Training Dataset:** VITON-HD & DressCode')
     with gr.Row():
         with gr.Column():
             person_img = gr.Image(
@@ -111,13 +126,23 @@ with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
             )
             gr.Examples(
                 inputs=person_img,
-                examples_per_page=5,
+                examples_per_page=15,
                 examples=[
                     osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/00064_00.jpg'),
                     osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/00205_00.jpg'),
                     osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/00272_00.jpg'),
                     osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/00396_00.jpg'),
-                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/00458_00.jpg')
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/00458_00.jpg'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full1.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full2.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full3.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full4.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full5.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full6.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full7.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full8.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full9.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/person/full10.jpg')
                 ],
             )
 
@@ -128,34 +153,60 @@ with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
                 type='filepath',
                 interactive=True
             )
+            category = gr.Radio(choices=['upper', 'lower', 'overall'], label='Garment Category', value='upper')
             gr.Examples(
                 inputs=garment_img,
-                examples_per_page=5,
+                examples_per_page=15,
                 examples=[
                     osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/00205_00.jpg'),
                     osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/00311_00.jpg'),
                     osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/00339_00.jpg'),
                     osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/00641_00.jpg'),
-                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/01048_00.jpg')
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/01048_00.jpg'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/dress1.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/dress2.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/dress3.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/dress4.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/dress5.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/combo1.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/combo2.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/combo3.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/combo4.png'),
+                    osp.join(PROJECT_ROOT_PATH, 'gradio_demo/examples/garment/combo5.png'),
                 ],
             )
-
+        
         with gr.Column():
-            generated_img = gr.Image(
-                label='Output',
-                interactive=False
-            )
             with gr.Row():
-                tryon_button = gr.Button('Press to try-on')
-            with gr.Row():
-                poisson_blending = gr.Checkbox(label='Poisson Blending', info='Image Enhancer (post-processing)')
+                generated_mask = gr.Image(label='Mask', interactive=False)
+                generated_img = gr.Image(label='Output', interactive=False)
+            
+            model_name = gr.Dropdown(['1512', '1512-preview'], value='1512', label='Models', info='*Note: 1512-preview does not support Lower & Full-body.')
+            mask_btn = gr.Button('Step 1: Run Mask')
+            tryon_btn = gr.Button('Step 2: Try-on')
+            poisson_blending = gr.Checkbox(value=True, label='Poisson Blending', info='Image Enhancer (post-processing)')
 
-        tryon_button.click(
-            fn=try_on,
-            inputs=[person_img, garment_img, poisson_blending],
-            outputs=[generated_img]
-        )
+            def _get_mask(img_path, ctg):
+                img = Image.open(img_path)
+                img = ImageOps.fit(img, size=(OutputSize.W.value, OutputSize.H.value))
+                if ctg == 'overall': 
+                    ctg = 'dresses'
+                else:
+                    ctg += '_body'
+                mask = masker.create_mask(img, ctg, return_img=False)
+                return mask2agn(mask, img)
+
+            mask_btn.click(
+                fn=_get_mask,
+                inputs=[person_img, category],
+                outputs=[generated_mask]
+            )
+            tryon_btn.click(
+                fn=try_on,
+                inputs=[person_img, garment_img, poisson_blending, category, model_name],
+                outputs=[generated_img]
+            )
 
 
 if __name__ == "__main__":
-    demo.launch(share=True, auth=('heatmob', 'navier'))
+    demo.launch(share=True)
