@@ -1,19 +1,21 @@
 #/bin/bash
-base_path=checkpoints/navier-1/navier-1-beta-1512
+base_path=/home/jupyter/H-engine/results/navier-1-1512
 
-export MODEL_PATH="${base_path}/ckpt-60000 ${base_path}/ckpt-108000 ${base_path}/ckpt-156000 ${base_path}/ckpt-204000 ${base_path}/ckpt-252000"
-export DATASET_NAME=dresscode
-export DATAPATH=/hosjiu/data/DressCode
+export MODEL_PATH="${base_path}/ckpt-312000"
+export DATASET_NAME=vitonhd
+export DATAPATH=datasets/vitonhd
 export OUTPUT_DIR=results/eval
-export NUM_WORKERS=4
-export BATCH_SIZE=4
+export NUM_WORKERS=8
+export BATCH_SIZE=16
+export DEVICE="cuda:0"
 
 python inference.py \
 --model_path="$MODEL_PATH" \
 --dataset_name=$DATASET_NAME \
---dresscode_datapath=$DATAPATH \
+--vitonhd_datapath=$DATAPATH \
 --output_dir=$OUTPUT_DIR \
 --num_workers=$NUM_WORKERS \
 --batch_size=$BATCH_SIZE \
---eval \
---save_metrics_to_file
+--device=$DEVICE \
+--eval
+# --save_metrics_to_file

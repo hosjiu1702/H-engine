@@ -1,3 +1,4 @@
+import random
 from typing import Text, Union, List
 from pathlib import Path
 import os
@@ -75,6 +76,11 @@ class VITONHDDataset(Dataset):
             self.c_paths = _get_file_paths(Path(datapath, 'cloth'))
             self.dp_paths = _get_file_paths(Path(datapath, 'image-densepose'))
 
+    def get_random_image(self):
+        img_path = random.choice(self.im_paths)
+        img = Image.open(img_path)
+        return img
+            
     def __len__(self):
         return len(self.im_paths)
 
