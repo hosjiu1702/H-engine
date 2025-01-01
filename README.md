@@ -12,7 +12,7 @@
 - [x] training code
 - [x] pipeline code
 - [x] Gradio demo
-- [ ] evaluation code
+- [x] evaluation code
 - [x] <strike>legacy code (old pipeline)</strike>
 
 ## VTO Models
