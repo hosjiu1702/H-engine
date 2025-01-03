@@ -233,7 +233,7 @@ if __name__ == '__main__':
                 raise ValueError('Supported Datasets: VITON-HD, DressCode')
             
             # FID
-            print(f'Compute FID score for [{ckpt_name}]\n')
+            print(f'Compute FID score\n')
             if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
                 # makes dataset statistics (features from InceptionNet-v3 by default)
                 make_custom_stats(dataset_name=args.dataset_name, dataset_path=dataset_path)
@@ -249,6 +249,7 @@ if __name__ == '__main__':
             
             if args.order == 'paired':
                 # SSIM, LPIPS
+                print('Compute SSIM & LPIPS\n')
                 fields += ['SSIM', 'LPIPS']
                 transform = transforms.ToTensor()
                 pred_dataset = PredictionDataLoader(
