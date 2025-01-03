@@ -1,13 +1,16 @@
 import random
-from typing import List
+from typing import List, Tuple
 from os import path as osp
 import os
 import argparse
+from PIL import Image
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 from tqdm import tqdm
 from cleanfid import fid
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+from torchmetrics.image import StructuralSimilarityIndexMeasure
 from prettytable import PrettyTable
 from src.models.utils import load_model
 from src.pipelines.spacat_pipeline import TryOnPipeline
@@ -97,11 +100,63 @@ def parse_args():
     return parser.parse_args()
 
 
+class GroundTruthDataLoader(Dataset):
+    def __init__(self, dataset_path: str, dataset_name: str, transform: transforms, size: Tuple[int]):
+        self.dataroot = dataset_path
+        self.dataset = dataset_name
+        self.transform = transform
+        self.size = size
+
+        CATEGORIES = ['lower_body', 'upper_body', 'dresses']
+        if dataset_name == 'dresscode':
+            dresscode_filesplit = os.path.join(dataset_path, f"test_pairs_paired.txt")
+            with open(dresscode_filesplit, 'r') as f:
+                lines = f.read().splitlines()
+            self.paths = sorted([
+                osp.join(dataset_path, category, 'images', line.strip().split()[0]) for line in lines for
+                category in CATEGORIES if
+                osp.exists(osp.join(dataset_path, category, 'images', line.strip().split()[0]))
+            ])
+        elif dataset_name == 'vitonhd':
+            self.paths = [osp.abspath(entry) for entry in os.scandir(osp.join(dataset_path, 'test', 'image'))]
+        else:
+            raise ValueError(f'{dataset_name} is not supported.')
+
+    def __len__(self):
+        return len(self.paths)
+    
+    def __getitem__(self, idx):
+        img_name = osp.basename(osp.splitext(self.paths[idx])[0])
+        img = Image.open(self.path[idx]).resize(self.size)
+        img_tensor = self.transform(img)
+        item = {'image': img_tensor, 'name': img_name}
+        return item
+
+
+class PredictionDataLoader(Dataset):
+    def __init__(self, datapath: str, transform: transforms, size: Tuple[int]):
+        self.datapath = datapath
+        self.transform = transform
+        self.size = size
+        self.paths = sorted([osp.abspath(entry) for entry in os.scandir(datapath)])
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        img_name = osp.basename(osp.splitext(self.paths[idx])[0])
+        img = Image.open(self.paths[idx]).resize(self.size)
+        img_tensor = self.transform(img)
+        item = {'image': img_tensor, 'name': img_name}
+        return item
+
+
 if __name__ == '__main__':
     args = parse_args()
     
     table = PrettyTable()
-    table.field_names = ['Model', 'FID']
+    fields = ['Model', 'FID']
+    row = []
 
     assert isinstance(args.model_path, List)
 
@@ -142,6 +197,7 @@ if __name__ == '__main__':
         if not osp.isdir(save_dir):
             os.makedirs(save_dir, exist_ok=False)
         else:
+            # PREDICTS TRY-ON IMAGES
             num_images = len(os.listdir(save_dir))
             if num_images == len(test_set):
                 # Check whether or not to generate try-on images.
@@ -167,6 +223,7 @@ if __name__ == '__main__':
                                 img.save(osp.join(save_dir, f'{name}.png'))
                 print('\nGeneration Done.\n')
 
+        # EVALUATION
         if args.eval:
             if args.dataset_name == 'vitonhd':
                 dataset_path = args.vitonhd_datapath
@@ -188,17 +245,48 @@ if __name__ == '__main__':
                 verbose=True,
                 use_dataparallel=False
             )
-            table.add_row([ckpt_name, fid_score])
+            row += [fid_score]
             
             if args.order == 'paired':
-                pass
-                # im_name = random.choice(os.listdir(save_dir))
-                # pred_img = Image.open(osp.join(save_dir, im_name))
-                # gt_img = test_set.get_random_image()
-                # if pred_img.size != gt_img.size:
-                #     raise NotImplementedError()
-                # lpips = LearnedPerceptualImagePatchSimilarity(net_type='alex').to(args.device)
-                # for gt_batch, pred_batch in tqdm(zip(test_dataloader, )):
+                # SSIM, LPIPS
+                fields += ['SSIM', 'LPIPS']
+                transform = transforms.ToTensor()
+                pred_dataset = PredictionDataLoader(
+                    datapath=dataset_path,
+                    transform=transform,
+                    size=(args.width, args.height)
+                )
+                gt_dataset = GroundTruthDataLoader(
+                    dataset_path=dataset_path,
+                    dataset_name=args.dataset_name,
+                    transform=transform,
+                    size=(args.width, args.height)
+                )
+                pred_dataloader = DataLoader(
+                    pred_dataset,
+                    batch_size=args.batch_size,
+                    shuffle=False,
+                    num_workers=args.num_workers
+                )
+                gt_dataloader = DataLoader(
+                    gt_dataset,
+                    batch_size=args.batch_size,
+                    shuffle=False,
+                    num_workers=args.num_workers
+                )
+
+                ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(args.device)
+                lpips = LearnedPerceptualImagePatchSimilarity(net_type='squeeze').to(args.device)
+
+                for gt_batch, pred_batch in tqdm(zip(gt_dataloader, pred_dataloader)):
+                    gt_images, gt_names = gt_batch['image'], gt_batch['name']
+                    pred_images, pred_names = pred_batch['image'], pred_batch['name']
+                    assert pred_names == gt_names, 'Predicted images and ground truth ones are not matching.'
+                    ssim.update(pred_images, gt_images)
+                    lpips.update(pred_images, gt_images)
+                ssim_score = ssim.compute()
+                lpips_score = lpips.compute()
+                row += [ssim_score, lpips_score]
 
         del unet
         del vae
@@ -206,6 +294,8 @@ if __name__ == '__main__':
         del pipeline
         torch.cuda.empty_cache()
 
+    table.field_names = fields
+    table.add_row(row)
     print(f'\n{table}')
 
     if args.save_metrics_to_file:
