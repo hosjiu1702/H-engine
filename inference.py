@@ -196,32 +196,31 @@ if __name__ == '__main__':
         save_dir = osp.join(args.output_dir, f'{args.dataset_name}_{args.order}', f'{ckpt_name}')
         if not osp.isdir(save_dir):
             os.makedirs(save_dir, exist_ok=False)
+
+        num_images = len(os.listdir(save_dir))
+        if num_images == len(test_set):
+            # Check whether or not to generate try-on images.
+            # This should be an effective way to not wasting time & computational cost.
+            print(f'\nNo generation process is done because there is already generated images under the folder {save_dir}')
         else:
-            # PREDICTS TRY-ON IMAGES
-            num_images = len(os.listdir(save_dir))
-            if num_images == len(test_set):
-                # Check whether or not to generate try-on images.
-                # This should be an effective way to not wasting time & computational cost.
-                print(f'\nNo generation process is done because there is already generated images under the folder {save_dir}')
-            else:
-                # Generate try-on images
-                print(f'\nCKPT: {ckpt_name}')
-                print(f'Generating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
-                for idx, batch in enumerate(tqdm(test_dataloader)):
-                    with torch.inference_mode():
-                        with torch.amp.autocast(args.device):
-                            images = pipeline(
-                                image=batch['image'].to(args.device),
-                                mask_image=batch['mask'].to(args.device),
-                                densepose_image=batch['densepose'].to(args.device),
-                                cloth_image=batch['cloth_raw'].to(args.device),
-                                height=args.height,
-                                width=args.width,
-                                guidance_scale=1.5
-                            ).images
-                            for img, name in zip(images, batch['im_name']):
-                                img.save(osp.join(save_dir, f'{name}.png'))
-                print('\nGeneration Done.\n')
+            # Generate try-on images
+            print(f'\nCKPT: {ckpt_name}')
+            print(f'Generating try-on images on {args.dataset_name} ({args.order} setting) ...\n')
+            for idx, batch in enumerate(tqdm(test_dataloader)):
+                with torch.inference_mode():
+                    with torch.amp.autocast(args.device):
+                        images = pipeline(
+                            image=batch['image'].to(args.device),
+                            mask_image=batch['mask'].to(args.device),
+                            densepose_image=batch['densepose'].to(args.device),
+                            cloth_image=batch['cloth_raw'].to(args.device),
+                            height=args.height,
+                            width=args.width,
+                            guidance_scale=1.5
+                        ).images
+                        for img, name in zip(images, batch['im_name']):
+                            img.save(osp.join(save_dir, f'{name}.png'))
+            print('\nGeneration Done.\n')
 
         # EVALUATION
         if args.eval:
