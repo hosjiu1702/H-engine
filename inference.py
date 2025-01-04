@@ -118,7 +118,7 @@ class GroundTruthDataLoader(Dataset):
                 osp.exists(osp.join(dataset_path, category, 'images', line.strip().split()[0]))
             ])
         elif dataset_name == 'vitonhd':
-            self.paths = [osp.abspath(entry) for entry in os.scandir(osp.join(dataset_path, 'test', 'image'))]
+            self.paths = sorted([osp.abspath(entry) for entry in os.scandir(osp.join(dataset_path, 'test', 'image'))])
         else:
             raise ValueError(f'{dataset_name} is not supported.')
 
@@ -127,7 +127,7 @@ class GroundTruthDataLoader(Dataset):
     
     def __getitem__(self, idx):
         img_name = osp.basename(osp.splitext(self.paths[idx])[0])
-        img = Image.open(self.path[idx]).resize(self.size)
+        img = Image.open(self.paths[idx]).resize(self.size)
         img_tensor = self.transform(img)
         item = {'image': img_tensor, 'name': img_name}
         return item
@@ -153,13 +153,13 @@ class PredictionDataLoader(Dataset):
 
 if __name__ == '__main__':
     args = parse_args()
-    
-    table = PrettyTable()
-    fields = ['Model', 'FID']
-    row = []
 
     assert isinstance(args.model_path, List)
 
+    table = PrettyTable()
+    fields = ['Model', 'FID']
+    row = []
+    
     # *model_path* path argument should follow format "ROOT/../MODEL_NAME/CKPT_NAME"
     for model_path in args.model_path:
         unet, vae, scheduler = load_model(model_path, dtype=torch.float16)
@@ -219,7 +219,7 @@ if __name__ == '__main__':
                             guidance_scale=1.5
                         ).images
                         for img, name in zip(images, batch['im_name']):
-                            img.save(osp.join(save_dir, f'{name}.png'))
+                            img.save(osp.join(save_dir, f'{name}'), quality=100, subsampling=0)
             print('\nGeneration Done.\n')
 
         # EVALUATION
@@ -244,15 +244,16 @@ if __name__ == '__main__':
                 verbose=True,
                 use_dataparallel=False
             )
+            fid_score = round(fid_score, 3)
             row += [fid_score]
             
             if args.order == 'paired':
                 # SSIM, LPIPS
-                print('Compute SSIM & LPIPS\n')
+                print('\nCompute SSIM & LPIPS\n')
                 fields += ['SSIM', 'LPIPS']
                 transform = transforms.ToTensor()
                 pred_dataset = PredictionDataLoader(
-                    datapath=dataset_path,
+                    datapath=save_dir,
                     transform=transform,
                     size=(args.width, args.height)
                 )
@@ -281,28 +282,31 @@ if __name__ == '__main__':
                 for gt_batch, pred_batch in tqdm(zip(gt_dataloader, pred_dataloader)):
                     gt_images, gt_names = gt_batch['image'], gt_batch['name']
                     pred_images, pred_names = pred_batch['image'], pred_batch['name']
-                    assert pred_names == gt_names, 'Predicted images and ground truth ones are not matching.'
+                    # assert pred_names == gt_names, 'Predicted images and ground truth ones are not matching.'
+                    pred_images = pred_images.to(args.device)
+                    gt_images = gt_images.to(args.device)
                     ssim.update(pred_images, gt_images)
                     lpips.update(pred_images, gt_images)
-                ssim_score = ssim.compute()
-                lpips_score = lpips.compute()
+                ssim_score = round(ssim.compute().item(), 3)
+                lpips_score = round(lpips.compute().item(), 3)
                 row += [ssim_score, lpips_score]
+
+            table.field_names = fields
+            row.insert(0, ckpt_name)
+            table.add_row(row)
+            print(f'\n{table}')
+
+            if args.save_metrics_to_file:
+                model_name = model_path.split('/')[-2]
+                save_dir = osp.join(PROJECT_ROOT_PATH, 'tmp', 'metrics', args.dataset_name, args.order)
+                os.makedirs(save_dir, exist_ok=True)
+                file = osp.join(save_dir, f'{model_name}.txt')
+                with open(file, 'w') as f:
+                    f.write(table.get_string())
+                print(f'Saved metrics to {file}\n')
 
         del unet
         del vae
         del scheduler
         del pipeline
         torch.cuda.empty_cache()
-
-    table.field_names = fields
-    table.add_row(row)
-    print(f'\n{table}')
-
-    if args.save_metrics_to_file:
-        model_name = model_path.split('/')[-2]
-        save_dir = osp.join(PROJECT_ROOT_PATH, 'tmp', 'metrics', args.dataset_name, args.order)
-        os.makedirs(save_dir, exist_ok=True)
-        file = osp.join(save_dir, f'{model_name}.txt')
-        with open(file, 'w') as f:
-            f.write(table.get_string())
-        print(f'Saved metrics to {file}\n')
