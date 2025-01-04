@@ -292,7 +292,6 @@ if __name__ == '__main__':
         table.field_names = fields
         row.insert(0, ckpt_name)
         table.add_row(row)
-        print(f'\n{table}')
 
         if args.save_metrics_to_file:
             model_name = model_path.split('/')[-2]
@@ -308,3 +307,5 @@ if __name__ == '__main__':
         del scheduler
         del pipeline
         torch.cuda.empty_cache()
+    
+    print(f'\n{table}')
