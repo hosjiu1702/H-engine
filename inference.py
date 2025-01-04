@@ -282,7 +282,7 @@ if __name__ == '__main__':
                 for gt_batch, pred_batch in tqdm(zip(gt_dataloader, pred_dataloader)):
                     gt_images, gt_names = gt_batch['image'], gt_batch['name']
                     pred_images, pred_names = pred_batch['image'], pred_batch['name']
-                    # assert pred_names == gt_names, 'Predicted images and ground truth ones are not matching.'
+                    assert pred_names == gt_names, 'Predicted images and ground truth ones are not matching.'
                     pred_images = pred_images.to(args.device)
                     gt_images = gt_images.to(args.device)
                     ssim.update(pred_images, gt_images)
