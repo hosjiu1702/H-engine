@@ -88,11 +88,6 @@ def parse_args():
         default=8,
     )
     parser.add_argument(
-        '--eval',
-        action='store_true',
-        help='Whether or not to evaluate model on the given dataset.'
-    )
-    parser.add_argument(
         '--save_metrics_to_file',
         action='store_true'
     )
@@ -222,88 +217,91 @@ if __name__ == '__main__':
                             img.save(osp.join(save_dir, f'{name}'), quality=100, subsampling=0)
             print('\nGeneration Done.\n')
 
-        # EVALUATION
-        if args.eval:
-            if args.dataset_name == 'vitonhd':
-                dataset_path = args.vitonhd_datapath
-            elif args.dataset_name == 'dresscode':
-                dataset_path = args.dresscode_datapath
-            else:
-                raise ValueError('Supported Datasets: VITON-HD, DressCode')
-            
-            # FID
-            print(f'Compute FID score\n')
-            if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
-                # makes dataset statistics (features from InceptionNet-v3 by default)
-                make_custom_stats(dataset_name=args.dataset_name, dataset_path=dataset_path)
-            fid_score = fid.compute_fid(
-                fdir1=save_dir,
-                dataset_name=args.dataset_name,
-                mode='clean',
-                dataset_split='custom',
-                verbose=True,
-                use_dataparallel=False
+        ##############
+        #            #
+        # Evaluation #
+        #            #
+        ##############
+        if args.dataset_name == 'vitonhd':
+            dataset_path = args.vitonhd_datapath
+        elif args.dataset_name == 'dresscode':
+            dataset_path = args.dresscode_datapath
+        else:
+            raise ValueError('Supported Datasets: VITON-HD, DressCode')
+        
+        # FID
+        print(f'Compute FID score\n')
+        if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
+            # makes dataset statistics (features from InceptionNet-v3 by default)
+            make_custom_stats(dataset_name=args.dataset_name, dataset_path=dataset_path)
+        fid_score = fid.compute_fid(
+            fdir1=save_dir,
+            dataset_name=args.dataset_name,
+            mode='clean',
+            dataset_split='custom',
+            verbose=True,
+            use_dataparallel=False
+        )
+        fid_score = round(fid_score, 3)
+        row += [fid_score]
+        
+        if args.order == 'paired':
+            # SSIM, LPIPS
+            print('\nCompute SSIM & LPIPS\n')
+            fields += ['SSIM', 'LPIPS']
+            transform = transforms.ToTensor()
+            pred_dataset = PredictionDataLoader(
+                datapath=save_dir,
+                transform=transform,
+                size=(args.width, args.height)
             )
-            fid_score = round(fid_score, 3)
-            row += [fid_score]
-            
-            if args.order == 'paired':
-                # SSIM, LPIPS
-                print('\nCompute SSIM & LPIPS\n')
-                fields += ['SSIM', 'LPIPS']
-                transform = transforms.ToTensor()
-                pred_dataset = PredictionDataLoader(
-                    datapath=save_dir,
-                    transform=transform,
-                    size=(args.width, args.height)
-                )
-                gt_dataset = GroundTruthDataLoader(
-                    dataset_path=dataset_path,
-                    dataset_name=args.dataset_name,
-                    transform=transform,
-                    size=(args.width, args.height)
-                )
-                pred_dataloader = DataLoader(
-                    pred_dataset,
-                    batch_size=args.batch_size,
-                    shuffle=False,
-                    num_workers=args.num_workers
-                )
-                gt_dataloader = DataLoader(
-                    gt_dataset,
-                    batch_size=args.batch_size,
-                    shuffle=False,
-                    num_workers=args.num_workers
-                )
+            gt_dataset = GroundTruthDataLoader(
+                dataset_path=dataset_path,
+                dataset_name=args.dataset_name,
+                transform=transform,
+                size=(args.width, args.height)
+            )
+            pred_dataloader = DataLoader(
+                pred_dataset,
+                batch_size=args.batch_size,
+                shuffle=False,
+                num_workers=args.num_workers
+            )
+            gt_dataloader = DataLoader(
+                gt_dataset,
+                batch_size=args.batch_size,
+                shuffle=False,
+                num_workers=args.num_workers
+            )
 
-                ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(args.device)
-                lpips = LearnedPerceptualImagePatchSimilarity(net_type='squeeze').to(args.device)
+            ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(args.device)
+            lpips = LearnedPerceptualImagePatchSimilarity(net_type='squeeze').to(args.device)
 
-                for gt_batch, pred_batch in tqdm(zip(gt_dataloader, pred_dataloader)):
-                    gt_images, gt_names = gt_batch['image'], gt_batch['name']
-                    pred_images, pred_names = pred_batch['image'], pred_batch['name']
-                    assert pred_names == gt_names, 'Predicted images and ground truth ones are not matching.'
-                    pred_images = pred_images.to(args.device)
-                    gt_images = gt_images.to(args.device)
-                    ssim.update(pred_images, gt_images)
-                    lpips.update(pred_images, gt_images)
-                ssim_score = round(ssim.compute().item(), 3)
-                lpips_score = round(lpips.compute().item(), 3)
-                row += [ssim_score, lpips_score]
+            for gt_batch, pred_batch in tqdm(zip(gt_dataloader, pred_dataloader)):
+                gt_images, gt_names = gt_batch['image'], gt_batch['name']
+                pred_images, pred_names = pred_batch['image'], pred_batch['name']
+                assert pred_names == gt_names, 'Predicted images and ground truth ones are not matching.'
+                pred_images = pred_images.to(args.device)
+                gt_images = gt_images.to(args.device)
+                ssim.update(pred_images, gt_images)
+                lpips.update(pred_images, gt_images)
+            ssim_score = round(ssim.compute().item(), 3)
+            lpips_score = round(lpips.compute().item(), 3)
+            row += [ssim_score, lpips_score]
 
-            table.field_names = fields
-            row.insert(0, ckpt_name)
-            table.add_row(row)
-            print(f'\n{table}')
+        table.field_names = fields
+        row.insert(0, ckpt_name)
+        table.add_row(row)
+        print(f'\n{table}')
 
-            if args.save_metrics_to_file:
-                model_name = model_path.split('/')[-2]
-                save_dir = osp.join(PROJECT_ROOT_PATH, 'tmp', 'metrics', args.dataset_name, args.order)
-                os.makedirs(save_dir, exist_ok=True)
-                file = osp.join(save_dir, f'{model_name}.txt')
-                with open(file, 'w') as f:
-                    f.write(table.get_string())
-                print(f'Saved metrics to {file}\n')
+        if args.save_metrics_to_file:
+            model_name = model_path.split('/')[-2]
+            save_dir = osp.join(PROJECT_ROOT_PATH, 'tmp', 'metrics', args.dataset_name, args.order)
+            os.makedirs(save_dir, exist_ok=True)
+            file = osp.join(save_dir, f'{model_name}.txt')
+            with open(file, 'w') as f:
+                f.write(table.get_string())
+            print(f'Saved metrics to {file}\n')
 
         del unet
         del vae

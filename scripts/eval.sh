@@ -17,5 +17,4 @@ python inference.py \
 --num_workers=$NUM_WORKERS \
 --batch_size=$BATCH_SIZE \
 --device=$DEVICE \
---eval
-# --save_metrics_to_file
+--save_metrics_to_file
