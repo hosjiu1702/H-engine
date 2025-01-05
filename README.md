@@ -2,7 +2,7 @@
 <h1>H-engine
 </div>
 
-**H-engine**, which stands for *Heatmob VTO Engine*, aims to build a full-fledge virtual try-on (VTO) engine that support for training, testing, evaluating,... and serving as a simple codebase to try conduct many research ideas as quick as possible in terms of implementation.
+_**H-engine**, which stands for *Heatmob VTO Engine*, aims to build a full-fledge virtual try-on (VTO) engine that support for training, testing, evaluating,... and serving as a simple codebase to try conduct many research ideas as quick as possible in terms of implementation._
 
 ---
 > [!WARNING]
