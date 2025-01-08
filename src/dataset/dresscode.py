@@ -63,8 +63,9 @@ class DressCodeDataset(Dataset):
                     dataroot_names.append(dataroot)
 
         if use_dilated_relaxed_mask:
-            """ Only apply this logic when the underlying mask generation process
-            could not handle all of inputs from images/ folder.
+            """ Drop some images which are not existed in dilated mask folder for consistency when loading.
+            This happens because our masker (v2) could not handle some hard cases from
+            dataset so we ignore when preprocessing.
             """
             drop_indices = []
             for i, rootpath in enumerate(dataroot_names):
