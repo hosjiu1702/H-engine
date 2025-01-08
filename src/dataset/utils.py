@@ -38,9 +38,15 @@ def create_mask_v2_for_dresscode(base_path: Text, category: Text):
                     mask = masker.create_mask(image, category=category, return_img=True)
                     mask.save(save_path)
                 except IndexError:
-                    NUMBER_OF_ERRORS += 1
-                    ERROR_FILENAME.append(file_path)
-                    continue
+                    # if dress are included in lower_body category
+                    # this logic will handle it properly.
+                    try:
+                        mask = masker.create_mask(image, category='dresses', return_img=True)
+                        mask.save(save_path)
+                    except IndexError:
+                        NUMBER_OF_ERRORS += 1
+                        ERROR_FILENAME.append(file_path)
+                        continue
     print(f'NUMBER OF ERRORS: {NUMBER_OF_ERRORS}')
     print(f'ERROR_LIST: {ERROR_FILENAME}')
 
