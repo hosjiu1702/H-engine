@@ -517,7 +517,6 @@ def main():
     )
 
     global_steps = 0
-    rand_name = generate_rand_chars()
     test_batch = next(iter(test_dataloader))
     for epoch in range(0, args.num_train_epochs):
         train_loss = 0.
@@ -600,7 +599,7 @@ def main():
                         # Saves model at a certain training step
                         if global_steps % args.checkpointing_steps == 0:
                             # Just for resuming when we want to continue training from the last state
-                            save_path = os.path.join(args.output_dir, rand_name, 'checkpoints', f'ckpt-{global_steps}')
+                            save_path = os.path.join(args.output_dir, 'checkpoints', f'ckpt-{global_steps}') # should be added a timestamp
                             os.makedirs(save_path, exist_ok=True)
                             accelerator.save_state(save_path, safe_serialization=False)
                             accelerator.print(f'Saved state to {save_path}')
@@ -648,7 +647,7 @@ def main():
                                         })
                             # save full pipeline
                             if args.save:
-                                save_path = os.path.join(args.output_dir, rand_name, f'ckpt-{global_steps}')
+                                save_path = os.path.join(args.output_dir, f'ckpt-{global_steps}')
                                 pipe.save_pretrained(save_path)
                             del unwrapped_unet
                             del pipe
