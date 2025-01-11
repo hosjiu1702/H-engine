@@ -596,10 +596,10 @@ def main():
                     accelerator.log({'train_loss': train_loss}, step=global_steps) # log to predefined tracker, for example, wandb
                     train_loss = 0.
                     if accelerator.is_main_process:
-                        # Saves model at a certain training step
+                        # Saves model's state at a certain training step
                         if global_steps % args.checkpointing_steps == 0:
                             # Just for resuming when we want to continue training from the last state
-                            save_path = os.path.join(args.output_dir, 'checkpoints', f'ckpt-{global_steps}') # should be added a timestamp
+                            save_path = os.path.join(args.output_dir, f'state/{global_steps}-steps') # should be added a timestamp
                             os.makedirs(save_path, exist_ok=True)
                             accelerator.save_state(save_path, safe_serialization=False)
                             accelerator.print(f'Saved state to {save_path}')
@@ -627,7 +627,7 @@ def main():
                                         width=args.width,
                                         guidance_scale=1.5
                                     ).images # pil
-                                    img_path = os.path.join(args.output_dir, rand_name, 'images')
+                                    img_path = os.path.join(args.output_dir, 'images')
                                     os.makedirs(img_path, exist_ok=True)
                                     if args.report_to == 'wandb' and str2bool(args.use_tracker):
                                         wandb_tracker = accelerator.get_tracker('wandb')
@@ -647,7 +647,7 @@ def main():
                                         })
                             # save full pipeline
                             if args.save:
-                                save_path = os.path.join(args.output_dir, f'ckpt-{global_steps}')
+                                save_path = os.path.join(args.output_dir, f'checkpoint/{global_steps}-steps')
                                 pipe.save_pretrained(save_path)
                             del unwrapped_unet
                             del pipe
