@@ -302,6 +302,19 @@ def parse_args():
         help="SNR weighting gamma to be used if rebalancing the loss. Recommended value is 5.0. "
         "More details here: https://arxiv.org/abs/2303.09556.",
     )
+    parser.add_argument(
+        '--progressive_training',
+        action='store_true',
+        help="Do progressive training by resuming from a given checkpoint then continue training with high resolution images." \
+        "Paper reference:" \
+        "   - Learning Flow Fields in Attention for Controllable Person Image Generation (https://arxiv.org/abs/2412.08486v2)." \
+        "   - M&M VTO: Multi-Garment Virtual Try-On and Editing (https://arxiv.org/abs/2406.04542)."
+    )
+    parser.add_argument(
+        '--training_state_path',
+        type=str,
+        help='Path to the model\'s state that you want to resume aiming to do progressive training.'
+    )
 
     args = parser.parse_args()
 
@@ -339,24 +352,26 @@ def main():
 
     init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
 
-    # Update the first convolution layer to works with additional inputs
+    if unet.conv_in.in_channels == 4:
+        raise RuntimeError('This script supports inpainting UNet only.')
+
     if args.use_densepose:
         new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image) -- spatial dimension concatenation
-    else:
-        new_in_channels = 9
-    with torch.no_grad():
-        conv_new = torch.nn.Conv2d(
-            in_channels=new_in_channels,
-            out_channels=unet.conv_in.out_channels,
-            kernel_size=3,
-            padding=1,
-        )
-        conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
-        conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
-        conv_new.bias.data = unet.conv_in.bias.data
-        unet.conv_in = conv_new
-        unet.config['in_channels'] = new_in_channels
-        unet.config.in_channels = new_in_channels
+        # Add some channels to the first input convolution layer
+        # if we use additional auxiliary inputs like densepose, skeleton,...
+        with torch.no_grad():
+            conv_new = torch.nn.Conv2d(
+                in_channels=new_in_channels,
+                out_channels=unet.conv_in.out_channels,
+                kernel_size=3,
+                padding=1,
+            )
+            conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
+            conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
+            conv_new.bias.data = unet.conv_in.bias.data
+            unet.conv_in = conv_new
+            unet.config['in_channels'] = new_in_channels
+            unet.config.in_channels = new_in_channels
 
     set_train(vae, False)
     set_train(unet, True) # train full unet
@@ -510,18 +525,34 @@ def main():
     accelerator.print(f"  Total optimization steps = {args.max_train_steps}")
     accelerator.print("********* Running Training *********\n")
 
+    global_steps = 0
+    start_epoch = 0
+    if args.progressive_training:
+        try:
+            accelerator.load_state(args.training_state_path)
+            state_name = os.path.basename(args.training_state_path)
+            global_steps = int(state_name.split('-')[0])
+            start_epoch = global_steps // num_update_steps_per_epoch
+            resume_step = global_steps % num_update_steps_per_epoch
+        except ValueError as e:
+            global_steps = int(state_name.split('-')[1])
+            start_epoch = global_steps // num_update_steps_per_epoch
+            resume_step = global_steps % num_update_steps_per_epoch
+
     progress_bar = tqdm(
-        range(0, args.max_train_steps),
+        range(start_epoch, args.max_train_steps),
         desc='Steps',
         disable=not accelerator.is_local_main_process, # Only show the progress bar once on each machine.
     )
 
-    global_steps = 0
-    rand_name = generate_rand_chars()
     test_batch = next(iter(test_dataloader))
-    for epoch in range(0, args.num_train_epochs):
+    for epoch in range(start_epoch, args.num_train_epochs):
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
+            if args.progressive_training and epoch == start_epoch and step < resume_step:
+                if step % args.gradient_accumulation_steps == 0:
+                    progress_bar.update(1)
+                continue
             with accelerator.accumulate(unet):
                 concat_dim = -1
                 # Get inputs for denoising unet (Pixel Space --> Latent Space)
@@ -597,10 +628,10 @@ def main():
                     accelerator.log({'train_loss': train_loss}, step=global_steps) # log to predefined tracker, for example, wandb
                     train_loss = 0.
                     if accelerator.is_main_process:
-                        # Saves model at a certain training step
+                        # Saves model's state at a certain training step
                         if global_steps % args.checkpointing_steps == 0:
                             # Just for resuming when we want to continue training from the last state
-                            save_path = os.path.join(args.output_dir, rand_name, 'checkpoints', f'ckpt-{global_steps}')
+                            save_path = os.path.join(args.output_dir, f'state/{global_steps}-steps') # should be added a timestamp
                             os.makedirs(save_path, exist_ok=True)
                             accelerator.save_state(save_path, safe_serialization=False)
                             accelerator.print(f'Saved state to {save_path}')
@@ -628,7 +659,7 @@ def main():
                                         width=args.width,
                                         guidance_scale=1.5
                                     ).images # pil
-                                    img_path = os.path.join(args.output_dir, rand_name, 'images')
+                                    img_path = os.path.join(args.output_dir, 'images')
                                     os.makedirs(img_path, exist_ok=True)
                                     if args.report_to == 'wandb' and str2bool(args.use_tracker):
                                         wandb_tracker = accelerator.get_tracker('wandb')
@@ -648,7 +679,7 @@ def main():
                                         })
                             # save full pipeline
                             if args.save:
-                                save_path = os.path.join(args.output_dir, rand_name, f'ckpt-{global_steps}')
+                                save_path = os.path.join(args.output_dir, f'checkpoint/{global_steps}-steps')
                                 pipe.save_pretrained(save_path)
                             del unwrapped_unet
                             del pipe
