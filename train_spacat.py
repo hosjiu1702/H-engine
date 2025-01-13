@@ -534,9 +534,10 @@ def main():
             global_steps = int(state_name.split('-')[0])
             start_epoch = global_steps // num_update_steps_per_epoch
             resume_step = global_steps % num_update_steps_per_epoch
-        except Exception as e:
-            accelerator.print(f'Could not load your model state from {args.training_state_path}.')
-            accelerator.print(e)
+        except ValueError as e:
+            global_steps = int(state_name.split('-')[1])
+            start_epoch = global_steps // num_update_steps_per_epoch
+            resume_step = global_steps % num_update_steps_per_epoch
 
     progress_bar = tqdm(
         range(start_epoch, args.max_train_steps),
