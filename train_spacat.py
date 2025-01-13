@@ -302,6 +302,19 @@ def parse_args():
         help="SNR weighting gamma to be used if rebalancing the loss. Recommended value is 5.0. "
         "More details here: https://arxiv.org/abs/2303.09556.",
     )
+    parser.add_argument(
+        '--progressive_training',
+        action='store_true',
+        help="Do progressive training by resuming from a given checkpoint then continue training with high resolution images." \
+        "Paper reference:" \
+        "   - Learning Flow Fields in Attention for Controllable Person Image Generation (https://arxiv.org/abs/2412.08486v2)." \
+        "   - M&M VTO: Multi-Garment Virtual Try-On and Editing (https://arxiv.org/abs/2406.04542)."
+    )
+    parser.add_argument(
+        '--training_state_path',
+        type=str,
+        help='Path to the model\'s state that you want to resume aiming to do progressive training.'
+    )
 
     args = parser.parse_args()
 
@@ -510,17 +523,33 @@ def main():
     accelerator.print(f"  Total optimization steps = {args.max_train_steps}")
     accelerator.print("********* Running Training *********\n")
 
+    global_steps = 0
+    start_epoch = 0
+    if args.progressive_training:
+        try:
+            accelerator.load_state(args.training_state_path)
+            state_name = os.path.basename(args.training_state_path)
+            global_steps = int(state_name.split('-')[0])
+            start_epoch = global_steps // num_update_steps_per_epoch
+            resume_step = global_steps % num_update_steps_per_epoch
+        except Exception as e:
+            accelerator.print(f'Could not load your model state from {args.training_state_path}.')
+            accelerator.print(e)
+
     progress_bar = tqdm(
-        range(0, args.max_train_steps),
+        range(start_epoch, args.max_train_steps),
         desc='Steps',
         disable=not accelerator.is_local_main_process, # Only show the progress bar once on each machine.
     )
 
-    global_steps = 0
     test_batch = next(iter(test_dataloader))
-    for epoch in range(0, args.num_train_epochs):
+    for epoch in range(start_epoch, args.num_train_epochs):
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
+            if args.progressive_training and epoch == start_epoch and step < resume_step:
+                if step % args.gradient_accumulation_steps == 0:
+                    progress_bar.update(1)
+                continue
             with accelerator.accumulate(unet):
                 concat_dim = -1
                 # Get inputs for denoising unet (Pixel Space --> Latent Space)
