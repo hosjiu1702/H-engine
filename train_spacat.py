@@ -352,27 +352,28 @@ def main():
 
     init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
 
+    if unet.conv_in.in_channels == 4:
+        raise ValueError('This script supports inpainting UNet only')
+
     if not args.progressive_training:
         # So we train our model from scratch.
-        # Add some channels to the first input convolution layer
-        # if we use additional auxiliary inputs like densepose, skeleton,...
         if args.use_densepose:
             new_in_channels = 13 # 4 (noisy image) + 4 (masked image) + 4 (denspose) + 1 (mask image) -- spatial dimension concatenation
-        else:
-            new_in_channels = 9
-        with torch.no_grad():
-            conv_new = torch.nn.Conv2d(
-                in_channels=new_in_channels,
-                out_channels=unet.conv_in.out_channels,
-                kernel_size=3,
-                padding=1,
-            )
-            conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
-            conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
-            conv_new.bias.data = unet.conv_in.bias.data
-            unet.conv_in = conv_new
-            unet.config['in_channels'] = new_in_channels
-            unet.config.in_channels = new_in_channels
+            # Add some channels to the first input convolution layer
+            # if we use additional auxiliary inputs like densepose, skeleton,...
+            with torch.no_grad():
+                conv_new = torch.nn.Conv2d(
+                    in_channels=new_in_channels,
+                    out_channels=unet.conv_in.out_channels,
+                    kernel_size=3,
+                    padding=1,
+                )
+                conv_new.weight.data = conv_new.weight.data * 0. # Zero-initialized input
+                conv_new.weight.data[:, :unet.conv_in.in_channels, :, :] = unet.conv_in.weight.data # re-use conv weights for the original channels
+                conv_new.bias.data = unet.conv_in.bias.data
+                unet.conv_in = conv_new
+                unet.config['in_channels'] = new_in_channels
+                unet.config.in_channels = new_in_channels
 
     set_train(vae, False)
     set_train(unet, True) # train full unet
