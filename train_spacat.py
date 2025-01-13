@@ -348,7 +348,7 @@ def main():
     # Load diffusion-related components
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler')
     vae = AutoencoderKLForEmasc.from_pretrained(args.vae_path) # float16 vs float32 -> which one to choose?
-    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet')
+    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
 
     init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
 
