@@ -116,6 +116,8 @@ class GroundTruthDataLoader(Dataset):
             self.paths = sorted([osp.abspath(entry) for entry in os.scandir(osp.join(dataset_path, 'test', 'image'))])
         else:
             raise ValueError(f'{dataset_name} is not supported.')
+            
+        self.paths = sorted(self.paths, key=lambda x: x.split('/')[-1])
 
     def __len__(self):
         return len(self.paths)
@@ -153,6 +155,9 @@ if __name__ == '__main__':
 
     table = PrettyTable()
     fields = ['Model', 'FID']
+    if args.order == 'paired':
+        fields += ['SSIM', 'LPIPS']
+    table.field_names = fields
     row = []
     
     # *model_path* path argument should follow format "ROOT/../MODEL_NAME/CKPT_NAME"
@@ -188,7 +193,7 @@ if __name__ == '__main__':
         )
 
         ckpt_name = model_path.split('/')[-1]
-        save_dir = osp.join(args.output_dir, f'{args.dataset_name}_{args.order}', f'{ckpt_name}')
+        save_dir = osp.join(args.output_dir, f'{args.dataset_name}_{args.order}', f'{ckpt_name}') # need to add model name!
         if not osp.isdir(save_dir):
             os.makedirs(save_dir, exist_ok=False)
 
@@ -248,31 +253,13 @@ if __name__ == '__main__':
         if args.order == 'paired':
             # SSIM, LPIPS
             print('\nCompute SSIM & LPIPS\n')
-            fields += ['SSIM', 'LPIPS']
             transform = transforms.ToTensor()
-            pred_dataset = PredictionDataLoader(
-                datapath=save_dir,
-                transform=transform,
-                size=(args.width, args.height)
-            )
-            gt_dataset = GroundTruthDataLoader(
-                dataset_path=dataset_path,
-                dataset_name=args.dataset_name,
-                transform=transform,
-                size=(args.width, args.height)
-            )
-            pred_dataloader = DataLoader(
-                pred_dataset,
-                batch_size=args.batch_size,
-                shuffle=False,
-                num_workers=args.num_workers
-            )
-            gt_dataloader = DataLoader(
-                gt_dataset,
-                batch_size=args.batch_size,
-                shuffle=False,
-                num_workers=args.num_workers
-            )
+
+            pred_dataset = PredictionDataLoader(save_dir, transform, size=(args.width, args.height))
+            gt_dataset = GroundTruthDataLoader(dataset_path, args.dataset_name, transform, size=(args.width, args.height))
+
+            pred_dataloader = DataLoader(pred_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+            gt_dataloader = DataLoader(gt_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
             ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(args.device)
             lpips = LearnedPerceptualImagePatchSimilarity(net_type='squeeze').to(args.device)
@@ -289,7 +276,6 @@ if __name__ == '__main__':
             lpips_score = round(lpips.compute().item(), 3)
             row += [ssim_score, lpips_score]
 
-        table.field_names = fields
         row.insert(0, ckpt_name)
         table.add_row(row)
 
