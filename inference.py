@@ -91,6 +91,10 @@ def parse_args():
         '--save_metrics_to_file',
         action='store_true'
     )
+    parser.add_argument(
+        '--enable_reconstruction_metrics',
+        action='store_true'
+    )
 
     return parser.parse_args()
 
@@ -155,9 +159,6 @@ if __name__ == '__main__':
 
     table = PrettyTable()
     fields = ['Model', 'FID']
-    if args.order == 'paired':
-        fields += ['SSIM', 'LPIPS']
-    table.field_names = fields
     row = []
     
     # *model_path* path argument should follow format "ROOT/../MODEL_NAME/CKPT_NAME"
@@ -217,7 +218,8 @@ if __name__ == '__main__':
                             cloth_image=batch['cloth_raw'].to(args.device),
                             height=args.height,
                             width=args.width,
-                            guidance_scale=1.5
+                            guidance_scale=1.5,
+                            num_inference_steps=40
                         ).images
                         for img, name in zip(images, batch['im_name']):
                             img.save(osp.join(save_dir, f'{name}'), quality=100, subsampling=0)
@@ -251,8 +253,9 @@ if __name__ == '__main__':
         fid_score = round(fid_score, 3)
         row += [fid_score]
         
-        if args.order == 'paired':
+        if args.order == 'paired' and args.enable_reconstruction_metrics:
             # SSIM, LPIPS
+            fields += ['SSIM', 'LPIPS']
             print('\nCompute SSIM & LPIPS\n')
             transform = transforms.ToTensor()
 
@@ -294,4 +297,5 @@ if __name__ == '__main__':
         del pipeline
         torch.cuda.empty_cache()
     
+    table.field_names = fields
     print(f'\n{table}')
