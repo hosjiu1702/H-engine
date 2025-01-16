@@ -12,17 +12,22 @@ PROJECT_ROOT_PATH = get_project_root()
 
 
 class Parsing:
-    def __init__(self, gpu_id: int):
+    def __init__(
+            self,
+            gpu_id: int,
+            atr_ckpt: str = 'checkpoints/humanparsing/parsing_atr.onnx',
+            lip_ckpt: str = 'checkpoints/humanparsing/parsing_lip.onnx'
+        ):
         self.gpu_id = gpu_id
         torch.cuda.set_device(gpu_id)
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         session_options.execution_mode = ort.ExecutionMode.ORT_PARALLEL
         session_options.add_session_config_entry('gpu_id', str(gpu_id))
-        self.session = ort.InferenceSession(os.path.join(PROJECT_ROOT_PATH, 'checkpoints/humanparsing/parsing_atr.onnx'),
+        self.session = ort.InferenceSession(os.path.join(PROJECT_ROOT_PATH, atr_ckpt),
                                             sess_options=session_options,
                                             providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
-        self.lip_session = ort.InferenceSession(os.path.join(PROJECT_ROOT_PATH, 'checkpoints/humanparsing/parsing_lip.onnx'),
+        self.lip_session = ort.InferenceSession(os.path.join(PROJECT_ROOT_PATH, lip_ckpt),
                                                 sess_options=session_options,
                                                 providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         
