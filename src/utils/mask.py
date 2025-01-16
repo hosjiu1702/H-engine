@@ -5,6 +5,8 @@ import cv2
 from PIL import Image, ImageDraw
 
 
+# this label_map seems wrong!
+# please refer to https://github.com/lara-unb/openpose/blob/master/doc/output.md#keypoint-ordering
 label_map = {
     "background": 0,
     "hat": 1,
