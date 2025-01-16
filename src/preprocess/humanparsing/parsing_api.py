@@ -132,7 +132,11 @@ def onnx_inference(session, lip_session, input_dir):
             s = meta['scale'].numpy()[0]
             w = meta['width'].numpy()[0]
             h = meta['height'].numpy()[0]
-            output = session.run(None, {"input.1": image.numpy().astype(np.float32)})
+            try:
+                output = session.run(None, {"input.1": image.numpy().astype(np.float32)})
+            except ValueError:
+                output = session.run(None, {"pixel_values": image.numpy()})
+                output.insert(0, None) # a dummy element trick for back compability
             upsample = torch.nn.Upsample(size=[512, 512], mode='bilinear', align_corners=True)
             upsample_output = upsample(torch.from_numpy(output[1][0]).unsqueeze(0))
             upsample_output = upsample_output.squeeze()
