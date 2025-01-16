@@ -19,12 +19,18 @@ class Maskerv2:
     def create_mask(
             self, img: PIL.Image.Image,
             category: Text = 'upper_body',
-            return_img: bool = True
+            return_img: bool = True,
+            model_type='dc' # default is DressCode
     ) -> Union[np.ndarray, PIL.Image.Image]:
         keypoints, _ = self.openpose(img)
         body_parse, _ = self.parser(img)
+        # check the existing of knee keypoints
+        right_knee = keypoints['pose_keypoints_2d'][9]
+        left_knee = keypoints['pose_keypoints_2d'][12]
+        if right_knee == [0, 0] and left_knee == [0, 0]:
+            model_type = 'hd'
         _mask, _, _, head_mask  = get_mask_location(
-            model_type='hd',
+            model_type=model_type,
             category=category,
             model_parse=body_parse,
             keypoint=keypoints,
