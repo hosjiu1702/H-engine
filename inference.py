@@ -282,6 +282,8 @@ if __name__ == '__main__':
 
         row.insert(0, ckpt_name)
         table.add_row(row)
+        table.field_names = fields
+        print(f'\n{table}')
 
         if args.save_metrics_to_file:
             save_dir = osp.join(PROJECT_ROOT_PATH, 'tmp', 'metrics', args.dataset_name, args.order)
@@ -296,6 +298,3 @@ if __name__ == '__main__':
         del scheduler
         del pipeline
         torch.cuda.empty_cache()
-    
-    table.field_names = fields
-    print(f'\n{table}')
