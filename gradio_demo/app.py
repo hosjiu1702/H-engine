@@ -20,8 +20,8 @@ load_dotenv()
 
 
 class OutputSize(Enum):
-    W = 384
-    H = 512
+    W = 600
+    H = 800
 
 
 masker = Masker()
@@ -33,11 +33,8 @@ masker = Masker()
 #     model_name='Navier-1',
 #     token=os.getenv('HF_TOKEN')
 # )
-model_path = osp.join(PROJECT_ROOT_PATH, 'results/navier-1-1512/ckpt-132000')
-model_path2 = osp.join(PROJECT_ROOT_PATH, 'checkpoints/navier-1/navier-1-beta-1512-preview/ckpt-20000-1512-preview')
-
+model_path = osp.join(PROJECT_ROOT_PATH, 'checkpoints/navier-1/navier-1-beta-1512-800x600/310000-steps')
 unet, vae, scheduler = load_model(model_path)
-unet2, _, _ = load_model(model_path2)
 
 # Load diffusion try-on pipeline
 pipeline = TryOnPipeline(
@@ -46,14 +43,15 @@ pipeline = TryOnPipeline(
     scheduler=scheduler
 ).to(device)
 
-pipeline2 = TryOnPipeline(
-    unet=unet2,
-    vae=vae,
-    scheduler=scheduler
-).to(device)
 
-
-def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool, category: str, model_name: str):
+def try_on(
+        person_img_path: str,
+        garment_img_path: str,
+        poisson_blending: bool,
+        category: str,
+        model_name: str,
+        inference_steps: int
+):
     """
     Main function to run try-on process.
     
@@ -91,8 +89,8 @@ def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool, 
 
     with torch.inference_mode():
         with torch.amp.autocast(device):
-            pipe = pipeline if model_name == '1512' else pipeline2
-            tryon = pipe(
+            # pipe = pipeline if model_name == '1512' else pipeline2
+            tryon = pipeline(
                 image=person_tensor.to(device),
                 mask_image=mask_tensor.to(device),
                 densepose_image=densepose_tensor.to(device),
@@ -101,6 +99,7 @@ def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool, 
                 width=OutputSize.W.value,
                 generator=torch.manual_seed(1996),
                 guidance_scale=1.5,
+                num_inference_steps=inference_steps
             ).images[0]
     
     if poisson_blending:
@@ -112,9 +111,9 @@ def try_on(person_img_path: str, garment_img_path: str, poisson_blending: bool, 
 with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
     title = "## Heatmob Virtual Try-on Demo ♨️"
     gr.Markdown(title)
-    gr.Markdown(f"**👷Model version:** Navier-1[Beta]")
+    gr.Markdown(f"**👷Model version:** Navier-1[Beta].1512")
     gr.Markdown(f'**🗂️Supported Category:** Upper-Body, Lower-Body, Dresses')
-    gr.Markdown(f'**🖥️Supported Resolution:** 384x512 *(output)*')
+    gr.Markdown(f'**🖥️Supported Resolution:** 800x600 *(output)*')
     gr.Markdown(f'**💾Training Dataset:** VITON-HD & DressCode')
     with gr.Row():
         with gr.Column():
@@ -181,11 +180,14 @@ with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
                 generated_mask = gr.Image(label='Mask', interactive=False)
                 generated_img = gr.Image(label='Output', interactive=False)
             
-            model_name = gr.Dropdown(['1512', '1512-preview'], value='1512', label='Models', info='*Note: 1512-preview does not support Lower & Full-body.')
+            model_name = gr.Dropdown(['1512[800x600]'], value='1512[800x600]', label='Models', info='')
             mask_btn = gr.Button('Step 1: Run Mask')
             tryon_btn = gr.Button('Step 2: Try-on')
             poisson_blending = gr.Checkbox(value=True, label='Poisson Blending', info='Image Enhancer (post-processing)')
 
+            with gr.Accordion('Advanced Options', open=False):
+                inference_steps = gr.Slider(minimum=10, maximum=50, value=40, step=5, label='Inference Steps')
+            
             def _get_mask(img_path, ctg):
                 img = Image.open(img_path)
                 img = ImageOps.fit(img, size=(OutputSize.W.value, OutputSize.H.value))
@@ -203,7 +205,7 @@ with gr.Blocks(theme='ParityError/Interstellar').queue(max_size=10) as demo:
             )
             tryon_btn.click(
                 fn=try_on,
-                inputs=[person_img, garment_img, poisson_blending, category, model_name],
+                inputs=[person_img, garment_img, poisson_blending, category, model_name, inference_steps],
                 outputs=[generated_img]
             )
 
