@@ -20,6 +20,7 @@ class Maskerv2:
             self, img: PIL.Image.Image,
             category: Text = 'upper_body',
             return_img: bool = True,
+            return_body_parse = False,
             model_type='dc' # default is DressCode
     ) -> Union[np.ndarray, PIL.Image.Image]:
         keypoints, _ = self.openpose(img)
@@ -45,6 +46,8 @@ class Maskerv2:
         mask = np.where(redundant_part, mask * 0, mask)
 
         if return_img:
+            if return_body_parse:
+                return Image.fromarray(mask), body_parse
             return Image.fromarray(mask)
 
         return mask

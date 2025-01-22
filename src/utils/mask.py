@@ -1,12 +1,9 @@
 # Copied from https://github.com/yisol/IDM-VTON/blob/main/gradio_demo/utils_mask.py
-from IPython.core.debugger import Pdb
 import numpy as np
 import cv2
 from PIL import Image, ImageDraw
 
 
-# this label_map seems wrong!
-# please refer to https://github.com/lara-unb/openpose/blob/master/doc/output.md#keypoint-ordering
 label_map = {
     "background": 0,
     "hat": 1,
@@ -29,8 +26,8 @@ label_map = {
 }
 
 def extend_arm_mask(wrist, elbow, scale):
-  wrist = elbow + scale * (wrist - elbow)
-  return wrist
+    wrist = elbow + scale * (wrist - elbow)
+    return wrist
 
 
 def hole_fill(img):
@@ -90,7 +87,14 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
                      (parse_array == label_map['upper_clothes']).astype(np.float32) + \
                      (parse_array == label_map['skirt']).astype(np.float32) + \
                      (parse_array == label_map['pants']).astype(np.float32)
-
+        parser_mask_changeable += np.logical_and(parse_array, np.logical_not(parser_mask_fixed))
+    elif category == 'long_dresses':
+        parse_mask = (parse_array == label_map['dress']).astype(np.float32) + \
+                     (parse_array == label_map['upper_clothes']).astype(np.float32) + \
+                     (parse_array == label_map['skirt']).astype(np.float32) + \
+                     (parse_array == label_map['pants']).astype(np.float32) + \
+                     (parse_array == label_map['left_leg']).astype(np.float32) + \
+                     (parse_array == label_map['right_leg']).astype(np.float32)
         parser_mask_changeable += np.logical_and(parse_array, np.logical_not(parser_mask_fixed))
     elif category == 'upper_body':
         parse_mask = (parse_array == label_map['upper_clothes']).astype(np.float32)
@@ -103,7 +107,8 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
         parse_mask = (parse_array == label_map['pants']).astype(np.float32) + \
                      (parse_array == label_map['left_leg']).astype(np.float32) + \
                      (parse_array == label_map['right_leg']).astype(np.float32) + \
-                     (parse_array == label_map['skirt']).astype(np.float32)
+                     (parse_array == label_map['skirt']).astype(np.float32) + \
+                     (parse_array == label_map['dress']).astype(np.float32)
         parser_mask_fixed += (parse_array == label_map["upper_clothes"]).astype(np.float32) + \
                              (parse_array == label_map['left_arm']).astype(np.float32) + \
                              (parse_array == label_map['right_arm']).astype(np.float32)
@@ -150,41 +155,26 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
         hands_left = np.logical_and(np.logical_not(im_arms_left), arms_left)
         hands_right = np.logical_and(np.logical_not(im_arms_right), arms_right)
         parser_mask_fixed += hands_left + hands_right
-        parser1 = np.copy(parser_mask_fixed)
 
     parser_mask_fixed = np.logical_or(parser_mask_fixed, parse_head)
-    parser2 = np.copy(parser_mask_fixed)
     parse_mask = cv2.dilate(parse_mask, np.ones((5, 5), np.uint16), iterations=5)
-    parser3 = np.copy(parse_mask)
     if category == 'dresses' or category == 'upper_body':
         neck_mask = (parse_array == 18).astype(np.float32)
         neck_mask = cv2.dilate(neck_mask, np.ones((5, 5), np.uint16), iterations=1)
-        parser12 = neck_mask
         neck_mask = np.logical_and(neck_mask, np.logical_not(parse_head))
-        parser11 = parse_head
-        parser13 = neck_mask
         parse_mask = np.logical_or(parse_mask, neck_mask)
-        parser4 = np.copy(parse_mask)
         arm_mask = cv2.dilate(np.logical_or(im_arms_left, im_arms_right).astype('float32'), np.ones((5, 5), np.uint16), iterations=4)
         parse_mask += np.logical_or(parse_mask, arm_mask)
 
-    parser5 = np.copy(parse_mask)
     parse_mask = np.logical_and(parser_mask_changeable, np.logical_not(parse_mask))
-    parser6 = np.copy(parse_mask)
 
     parse_mask_total = np.logical_or(parse_mask, parser_mask_fixed)
-    parser7 = np.copy(parse_mask_total)
     inpaint_mask = 1 - parse_mask_total
     img = np.where(inpaint_mask, 255, 0)
-    parser8 = np.copy(img)
     dst = hole_fill(img.astype(np.uint8))
-    parser9 = np.copy(dst)
     dst = refine_mask(dst)
-    parser10 = np.copy(dst)
     inpaint_mask = dst / 255 * 1
     mask = Image.fromarray(inpaint_mask.astype(np.uint8) * 255)
     mask_gray = Image.fromarray(inpaint_mask.astype(np.uint8) * 127)
 
-    tmp = {}
-
-    return mask, mask_gray, tmp, parse_head
+    return mask, _, _, _
