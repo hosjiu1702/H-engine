@@ -28,4 +28,5 @@ python-dotenv==1.0.1
 fire==0.7.0
 clean-fid==0.1.35
 prettytable==3.11.0
+optimum==1.23.3
 git+https://github.com/XPixelGroup/BasicSR.git
