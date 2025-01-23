@@ -17,9 +17,10 @@ os.environ['PYTHONBREAKPOINT'] = '0'
 IMAGE_INDICATOR_INDEX = 0
 masker = Masker()
 openpose = OpenPose(0)
+DRESS = 7 # COCO dataset format
 
 
-def create_mask_v2_for_dresscode(base_path: Text, category: Text):
+def create_mask_v2_for_dresscode(base_path: Text, category: Text, overwrite=False):
     NUMBER_OF_ERRORS = 0
     ERROR_FILENAME = []
     target_folder = 'mask_v2'
@@ -31,22 +32,23 @@ def create_mask_v2_for_dresscode(base_path: Text, category: Text):
         if int(indicator_idx) == IMAGE_INDICATOR_INDEX:
             with Image.open(file_path) as image:
                 save_path = osp.join(base_path, target_folder, file_name)
-                if os.path.isfile(save_path):
+                if os.path.isfile(save_path) and not overwrite:
                     print(f'IGNORE: {save_path}')
                     continue
                 try:
-                    mask = masker.create_mask(image, category=category, return_img=True)
-                    mask.save(save_path)
-                except IndexError:
-                    # if dress are included in lower_body category
-                    # this logic will handle it properly.
-                    try:
-                        mask = masker.create_mask(image, category='dresses', return_img=True)
-                        mask.save(save_path)
-                    except IndexError:
-                        NUMBER_OF_ERRORS += 1
-                        ERROR_FILENAME.append(file_path)
+                    mask, body_parse = masker.create_mask(
+                        image,
+                        category=category,
+                        return_img=True,
+                        return_body_parse=True
+                    )
+                    if category == 'lower_body' and DRESS in np.array(body_parse):
                         continue
+                    mask.save(save_path, quality=100, subsampling=0)
+                except IndexError:
+                    NUMBER_OF_ERRORS += 1
+                    ERROR_FILENAME.append(file_path)
+                    continue
     print(f'NUMBER OF ERRORS: {NUMBER_OF_ERRORS}')
     print(f'ERROR_LIST: {ERROR_FILENAME}')
 
@@ -133,10 +135,9 @@ def create_agnostic_from_mask_for_dresscode(base_path: Text):
         mask = rearrange(mask, 'c h w -> h w c')
         agnostic = np.where(mask, np.ones_like(img) * 127, img)
         agnostic = Image.fromarray(agnostic)
-        agnostic.save(osp.join(agnostic_path, mask_name), quality=100, subsampling=0)
-        
+        agnostic.save(osp.join(agnostic_path, mask_name), quality=100, subsampling=0)        
 
-    
+
 def create_mask_v2_for_dresscode_parallel(base_path, category):
     """ This function doesn't work.
     """

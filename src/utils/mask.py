@@ -86,12 +86,6 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
         parse_mask = (parse_array == label_map['dress']).astype(np.float32) + \
                      (parse_array == label_map['upper_clothes']).astype(np.float32) + \
                      (parse_array == label_map['skirt']).astype(np.float32) + \
-                     (parse_array == label_map['pants']).astype(np.float32)
-        parser_mask_changeable += np.logical_and(parse_array, np.logical_not(parser_mask_fixed))
-    elif category == 'long_dresses':
-        parse_mask = (parse_array == label_map['dress']).astype(np.float32) + \
-                     (parse_array == label_map['upper_clothes']).astype(np.float32) + \
-                     (parse_array == label_map['skirt']).astype(np.float32) + \
                      (parse_array == label_map['pants']).astype(np.float32) + \
                      (parse_array == label_map['left_leg']).astype(np.float32) + \
                      (parse_array == label_map['right_leg']).astype(np.float32)
@@ -136,7 +130,6 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
         size_left = [shoulder_left[0] - ARM_LINE_WIDTH // 2, shoulder_left[1] - ARM_LINE_WIDTH // 2, shoulder_left[0] + ARM_LINE_WIDTH // 2, shoulder_left[1] + ARM_LINE_WIDTH // 2]
         size_right = [shoulder_right[0] - ARM_LINE_WIDTH // 2, shoulder_right[1] - ARM_LINE_WIDTH // 2, shoulder_right[0] + ARM_LINE_WIDTH // 2,
                       shoulder_right[1] + ARM_LINE_WIDTH // 2]
-        
 
         if wrist_right[0] <= 1. and wrist_right[1] <= 1.:
             im_arms_right = arms_right
@@ -167,7 +160,6 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
         parse_mask += np.logical_or(parse_mask, arm_mask)
 
     parse_mask = np.logical_and(parser_mask_changeable, np.logical_not(parse_mask))
-
     parse_mask_total = np.logical_or(parse_mask, parser_mask_fixed)
     inpaint_mask = 1 - parse_mask_total
     img = np.where(inpaint_mask, 255, 0)
@@ -177,4 +169,4 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
     mask = Image.fromarray(inpaint_mask.astype(np.uint8) * 255)
     mask_gray = Image.fromarray(inpaint_mask.astype(np.uint8) * 127)
 
-    return mask, _, _, _
+    return mask, None, None, None

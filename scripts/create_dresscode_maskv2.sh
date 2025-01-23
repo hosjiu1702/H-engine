@@ -1,5 +1,6 @@
-# Sequential running
-python src/dataset/utils.py create_mask_v2_for_dresscode --base_path=/hosjiu/data/DressCode/dresses/ --category=dresses
+#!/bin/bash
+BASE_PATH=datasets/dresscode
+OVERWRITE=true
+CATEGORY=dresses
 
-# Parallel running
-# python src/dataset/utils.py create_mask_v2_for_dresscode_parallel --base_path=/hosjiu/data/DressCode/dresses/ --category=dresses
+python -u src/dataset/utils.py create_mask_v2_for_dresscode --base_path=$BASE_PATH/$CATEGORY/ --category=$CATEGORY --overwrite=$OVERWRITE

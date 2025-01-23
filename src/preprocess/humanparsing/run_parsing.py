@@ -26,10 +26,10 @@ class Parsing:
         session_options.add_session_config_entry('gpu_id', str(gpu_id))
         self.session = ort.InferenceSession(os.path.join(PROJECT_ROOT_PATH, atr_ckpt),
                                             sess_options=session_options,
-                                            providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+                                            providers=['CPUExecutionProvider'])
         self.lip_session = ort.InferenceSession(os.path.join(PROJECT_ROOT_PATH, lip_ckpt),
                                                 sess_options=session_options,
-                                                providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+                                                providers=['CPUExecutionProvider'])
         
 
     def __call__(self, input_image):
