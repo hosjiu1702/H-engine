@@ -26,6 +26,7 @@ from accelerate.utils import ProjectConfiguration, DistributedDataParallelKwargs
 from tqdm import tqdm
 from torchvision.transforms.functional import to_pil_image
 from PIL import Image
+import bitsandbytes as bnb
 
 from src.utils import (
     set_seed,
@@ -315,6 +316,10 @@ def parse_args():
         type=str,
         help='Path to the model\'s state that you want to resume aiming to do progressive training.'
     )
+    parser.add_argument(
+        '--train_with_8bit',
+        action='store_true'
+    )
 
     args = parser.parse_args()
 
@@ -384,9 +389,14 @@ def main():
     if args.allow_tf32:
         torch.backends.cuda.matmul.allow_tf32 = True
 
+    if args.train_with_8bit:
+        optimizer_class = bnb.optim.AdamW8bit
+    else:
+        optimizer_class = torch.optim.AdamW
+
     # Define optimizer
     params_to_opt = itertools.chain(unet.parameters()) # IP-Adapter was already joined into unet
-    optimizer = torch.optim.AdamW(
+    optimizer = optimizer_class(
         params_to_opt,
         lr=args.lr,
         betas=(args.adam_beta1, args.adam_beta2),
