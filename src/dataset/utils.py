@@ -120,7 +120,8 @@ def create_agnostic_from_mask_for_dresscode(base_path: Text):
             if osp.splitext(mask_name)[0] == osp.splitext(image_name)[0]:
                 tmp = image_name
                 break
-        assert tmp is not None
+        if tmp is None:
+            raise ValueError(f'Can not find image matching with mask {mask_name}!')
         img = osp.join(base_path, 'images', tmp)
         img = Image.open(img)
         img = np.array(img)
