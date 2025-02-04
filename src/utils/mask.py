@@ -150,7 +150,7 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
         parser_mask_fixed += hands_left + hands_right
 
     parser_mask_fixed = np.logical_or(parser_mask_fixed, parse_head)
-    parse_mask = cv2.dilate(parse_mask, np.ones((5, 5), np.uint16), iterations=5)
+    parse_mask = cv2.dilate(parse_mask, np.ones((5, 5), np.uint16), iterations=13)
     if category == 'dresses' or category == 'upper_body':
         neck_mask = (parse_array == 18).astype(np.float32)
         neck_mask = cv2.dilate(neck_mask, np.ones((5, 5), np.uint16), iterations=1)
