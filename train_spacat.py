@@ -320,6 +320,11 @@ def parse_args():
         '--train_with_8bit',
         action='store_true'
     )
+    parser.add_argument(
+        '--train_self_attn_only',
+        action='store_true',
+        help='Train only self-attention layers in UNet.'
+    )
 
     args = parser.parse_args()
 
@@ -356,6 +361,8 @@ def main():
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
 
     init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
+    #from xformers.ops import memory_efficient_attention
+    #unet.set_attn_processor(memory_efficient_attention)
 
     if unet.conv_in.in_channels == 4:
         raise RuntimeError('This script supports inpainting UNet only.')
@@ -379,7 +386,18 @@ def main():
             unet.config.in_channels = new_in_channels
 
     set_train(vae, False)
-    set_train(unet, True) # train full unet
+
+    if args.train_self_attn_only:
+        # Train only self-attention layers.
+        # This logic assumes that the cross-attention layers was disabled.
+        set_train(unet, False)
+        for name, module in unet.named_modules():
+            if name.endswith('.attn1'):
+                for params in module.parameters():
+                    params.requires_grad = True
+    else:
+        # train full unet
+        set_train(unet, True) # train full unet
 
     accelerator.print('\n==== Trainable Params ====')
     accelerator.print(f'VAE: {total_trainable_params(vae)}')
@@ -403,12 +421,12 @@ def main():
         eps=args.adam_epsilon,
         weight_decay=args.adam_weight_decay,
     )
-    
+
     # Load dataset for training
     if args.downscale:
         vars(args)['height'] = args.height // 2
         vars(args)['width'] = args.width // 2
-    
+
     if args.merge_hd_dc:
         # VITON-HD
         hd_train_dataset = VITONHDDataset(
@@ -600,7 +618,7 @@ def main():
 
                 unet_input = torch.cat([noisy_latents, masks, masked_image_latents, densepose_latents], dim=1) # concatenate in channel dim
                 noise_pred = unet(unet_input, timesteps, encoder_hidden_states=None).sample # Denoising or diffusion backward process
-                
+
                 if args.snr_gamma is None:
                     loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
                 else:
@@ -623,7 +641,7 @@ def main():
                     train_loss += avg_loss.item()
                 else:
                     train_loss += avg_loss.item() / args.gradient_accumulation_steps
-                
+
                 # Huggingface Accelerate seems do almost everything here
                 # so it obscures too much things under the hood making it
                 # very hard to understand how everything is going on
@@ -696,7 +714,7 @@ def main():
                             torch.cuda.empty_cache()
                 logs = {'step_loss': loss.detach().item()}
                 progress_bar.set_postfix(**logs)
- 
+
                 if global_steps >= args.max_train_steps:
                     break
 
