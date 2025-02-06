@@ -150,7 +150,19 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
         parser_mask_fixed += hands_left + hands_right
 
     parser_mask_fixed = np.logical_or(parser_mask_fixed, parse_head)
-    parse_mask = cv2.dilate(parse_mask, np.ones((5, 5), np.uint16), iterations=13)
+
+    # Because of relaxed dilated mask implementation (mask v2 - rectangle-shaped mask)
+    # we need to increase more dilation on lower body to be able to stick
+    # left and right leg into one mask so the filled mask could cover it properly on more cases.
+    #
+    # In the other hand, if this iteration arugment is too hight it could occulude the face region
+    # so we need to switch back to the original value 5.
+    if category == 'lower_body':
+        iterations = 13
+    else:
+        iterations = 5
+    parse_mask = cv2.dilate(parse_mask, np.ones((5, 5), np.uint16), iterations=iterations)
+
     if category == 'dresses' or category == 'upper_body':
         neck_mask = (parse_array == 18).astype(np.float32)
         neck_mask = cv2.dilate(neck_mask, np.ones((5, 5), np.uint16), iterations=1)
@@ -169,4 +181,4 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
     mask = Image.fromarray(inpaint_mask.astype(np.uint8) * 255)
     mask_gray = Image.fromarray(inpaint_mask.astype(np.uint8) * 127)
 
-    return mask, None, None, None
+    return mask, parse_head, None, None
