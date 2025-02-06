@@ -158,7 +158,7 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
     # In the other hand, if this iteration arugment is too hight it could occulude the face region
     # so we need to switch back to the original value 5.
     if category == 'lower_body':
-        iterations = 13
+        iterations = 20
     else:
         iterations = 5
     parse_mask = cv2.dilate(parse_mask, np.ones((5, 5), np.uint16), iterations=iterations)
