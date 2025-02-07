@@ -112,7 +112,8 @@ def create_agnostic_from_mask_for_dresscode(base_path: Text):
     os.makedirs(agnostic_path, exist_ok=True)
     mask_path = osp.join(base_path, 'mask_v2')
     mask_names = os.listdir(mask_path)
-    for mask_name in tqdm(mask_names):
+
+    def process_agn(mask_name):
         # person image
         tmp = None
         # number of images in the /images folder are always greater than ones in /mask_v2
@@ -136,7 +137,12 @@ def create_agnostic_from_mask_for_dresscode(base_path: Text):
         mask = rearrange(mask, 'c h w -> h w c')
         agnostic = np.where(mask, np.ones_like(img) * 127, img)
         agnostic = Image.fromarray(agnostic)
-        agnostic.save(osp.join(agnostic_path, mask_name), quality=100, subsampling=0)        
+        agnostic.save(osp.join(agnostic_path, mask_name), quality=100, subsampling=0)
+
+    import multiprocess as mp
+    num_processes = mp.cpu_count()
+    with mp.Pool(processes=num_processes) as pool:
+        pool.map(process_agn, mask_names)
 
 
 def create_mask_v2_for_dresscode_parallel(base_path, category):
