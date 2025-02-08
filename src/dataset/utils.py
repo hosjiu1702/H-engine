@@ -20,35 +20,54 @@ openpose = OpenPose(0)
 DRESS = 7 # COCO dataset format
 
 
+def _process_mask(file_name, d: dict):
+    file_path = osp.join(d.base_path, 'images', file_name)
+    indicator_idx = file_path.split('/')[-1].split('.')[0].split('_')[-1]
+    if int(indicator_idx) == IMAGE_INDICATOR_INDEX:
+        with Image.open(file_path) as image:
+            save_path = osp.join(d.base_path, d.target_folder, file_name)
+            if os.path.isfile(save_path) and not d.overwrite:
+                print(f'IGNORE: {save_path}')
+                return
+            try:
+                mask, body_parse = masker.create_mask(
+                    image,
+                    category=d.category,
+                    return_img=True,
+                    return_body_parse=True
+                )
+                if d.category == 'lower_body' and DRESS in np.array(body_parse):
+                    return
+                mask.save(save_path, quality=100, subsampling=0)
+            except IndexError:
+                NUMBER_OF_ERRORS += 1
+                d.ERROR_FILENAME.append(file_path)
+                return
+
 def create_mask_v2_for_dresscode(base_path: Text, category: Text, overwrite=False):
+
     NUMBER_OF_ERRORS = 0
     ERROR_FILENAME = []
+
     target_folder = 'mask_v2'
     os.makedirs(osp.join(base_path, target_folder), exist_ok=True)
     files_list = os.listdir(osp.join(base_path, 'images'))
-    for file_name in tqdm(files_list):
-        file_path = osp.join(base_path, 'images', file_name)
-        indicator_idx = file_path.split('/')[-1].split('.')[0].split('_')[-1]
-        if int(indicator_idx) == IMAGE_INDICATOR_INDEX:
-            with Image.open(file_path) as image:
-                save_path = osp.join(base_path, target_folder, file_name)
-                if os.path.isfile(save_path) and not overwrite:
-                    print(f'IGNORE: {save_path}')
-                    continue
-                try:
-                    mask, body_parse = masker.create_mask(
-                        image,
-                        category=category,
-                        return_img=True,
-                        return_body_parse=True
-                    )
-                    if category == 'lower_body' and DRESS in np.array(body_parse):
-                        continue
-                    mask.save(save_path, quality=100, subsampling=0)
-                except IndexError:
-                    NUMBER_OF_ERRORS += 1
-                    ERROR_FILENAME.append(file_path)
-                    continue
+    
+    import torch.multiprocessing as mp
+    from itertools import repeat
+    from types import SimpleNamespace
+    mp.set_start_method('spawn')
+    num_processes = mp.cpu_count()
+    with mp.Pool(processes=num_processes) as pool:
+        d = {
+            'base_path': base_path,
+            'target_folder': target_folder,
+            'category': category,
+            'ERROR_FILENAME': ERROR_FILENAME,
+            'overwrite': overwrite
+        }
+        pool.starmap(_process_mask, zip(files_list, repeat(SimpleNamespace(**d))))
+
     print(f'NUMBER OF ERRORS: {NUMBER_OF_ERRORS}')
     print(f'ERROR_LIST: {ERROR_FILENAME}')
 
