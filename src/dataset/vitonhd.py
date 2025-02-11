@@ -5,6 +5,7 @@ import os
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
+from torchvision.transforms.functional import adjust_hue, adjust_contrast
 from PIL import Image
 from transformers import CLIPImageProcessor
 from src.utils import is_image
@@ -40,6 +41,21 @@ class VITONHDDataset(Dataset):
         self.width = width
         self.use_CLIPVision = use_CLIPVision
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
+        self.mode = mode
+
+        if self.use_augmentation:
+            # flip
+            self.flip = v2.RandomHorizontalFlip(p=1)
+            # random shift
+            shift_x = random.uniform(0, 0.2)
+            shift_y = random.uniform(0, 0.2)
+            self.random_shift = v2.RandomAffine(degrees=0, translate=(shift_x, shift_y))
+            # random scale
+            self.random_scale = v2.RandomAffine(degrees=0, scale=(0.8, 1.2))
+            # hue adjustment
+            self.hue_value = random.uniform(-0.5, 0.5)
+            # contrast adjustment
+            self.contrast_factor = random.uniform(0.8, 1.2)
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
 
@@ -80,7 +96,7 @@ class VITONHDDataset(Dataset):
         img_path = random.choice(self.im_paths)
         img = Image.open(img_path)
         return img
-            
+
     def __len__(self):
         return len(self.im_paths)
 
@@ -88,7 +104,7 @@ class VITONHDDataset(Dataset):
         item = {}
 
         img_name = str(self.im_paths[index]).split('/')[-1]
-        
+
         # Person image
         img = Image.open(self.im_paths[index])
         origin_img = img = img.resize((self.width, self.height))
@@ -120,6 +136,32 @@ class VITONHDDataset(Dataset):
         masked_img = Image.open(self.agn_paths[index])
         origin_agn = masked_img = masked_img.resize((self.width, self.height))
         masked_img = self.transform(masked_img)
+
+        if self.mode == 'train' and self.use_augmentation:
+            if random.random() > 0.5:
+                img = self.flip(img)
+                c_raw = self.flip(c_raw)
+                mask = self.flip(mask)
+                masked_img = self.flip(masked_img)
+                dp = self.flip(dp)
+            if random.random() > 0.5:
+                img = adjust_hue(img, self.hue_value)
+                masked_img = adjust_hue(masked_img, self.hue_value)
+                c_raw = adjust_hue(c_raw, self.hue_value)
+            if random.random() > 0.5:
+                img = adjust_contrast(img, self.contrast_factor)
+                masked_img = adjust_contrast(masked_img, self.contrast_factor)
+                c_raw = adjust_contrast(c_raw, self.contrast_factor)
+            if random.random() > 0.5:
+                img = self.shift(img)
+                masked_img = self.shift(masked_img)
+                mask = self.shift(mask)
+                dp = self.shift(dp)
+            if random.random() > 0.5:
+                img = self.scale(img)
+                masked_img = self.scale(masked_img)
+                mask = self.scale(mask)
+                dp = self.scale(dp)
 
         item.update({
             'im_name': img_name,
