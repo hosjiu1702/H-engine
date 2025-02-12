@@ -17,6 +17,18 @@ This experiment aims to speed up stable diffusion using TensorRT
 
 
 
+# Environment
+To set up the environment, use the provided environment.yml file to create a Conda environment with all necessary dependencies.
+
+1. Run the following command to create the Conda environment:
+```bash
+conda env create -f environment.yml
+```
+2. Activate the environment:
+```bash
+conda activate sd1.5_inpainting_env
+```
+
 ## Download Resources 
 ### IP Adapter  
 Download the IP adapter using the following command:  
