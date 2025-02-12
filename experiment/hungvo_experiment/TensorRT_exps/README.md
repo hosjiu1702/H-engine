@@ -43,6 +43,15 @@ cd models
 wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter_sd15.bin
 ```
 
+### image_encoder 
+Download the image_encoder using the following command:  
+```bash
+cd models/image_encoder
+wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors
+wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/config.json
+```
+
+
 ## Inference
 ### 1. SD1.5 Inpainting + Ip_adapter:
 ```
