@@ -94,14 +94,14 @@ class DressCodeDataset(Dataset):
             im_names = tmp_im
             c_names = tmp_c
             dataroot_names = tmp_dataroot
-        
+
         self.im_names = im_names
         self.c_names = c_names
         self.dataroot_names = dataroot_names
 
     def get_random_image(self):
         return self.get_random_sample()['image']
-        
+
     def __len__(self):
         return len(self.im_names)
 
@@ -134,9 +134,9 @@ class DressCodeDataset(Dataset):
         mask = torch.from_numpy(mask)
 
         # agnostic image (masked image)
-        agn = Image.open(osp.join(dataroot, 'agnostic_v2', im_name))
-        agn = agn.resize((self.w, self.h))
-        agn = self.transform(agn)
+        masked_img = Image.open(osp.join(dataroot, 'agnostic_v2', im_name))
+        masked_img = masked_img.resize((self.w, self.h))
+        masked_img = self.transform(masked_img)
 
         # skeleton image
         skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name))
@@ -179,7 +179,7 @@ class DressCodeDataset(Dataset):
             'c_name': c_name,
             'original_image': self.totensor(clone_img),
             'image': img,
-            'masked_image': agn,
+            'masked_image': masked_img,
             'mask': mask,
             'densepose': dense,
             'cloth_raw': c,
@@ -193,14 +193,14 @@ class DressCodeDataset(Dataset):
         im_name = self.im_names[idx]
         c_name = self.c_names[idx]
         dataroot = self.dataroot_names[idx]
-        
+
         c = Image.open(osp.join(dataroot, 'images', c_name)).resize((self.w, self.h))
         img = Image.open(osp.join(dataroot, 'images', im_name)).resize((self.w, self.h))
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name)).resize((self.w, self.h))
         agn = Image.open(osp.join(dataroot, 'agnostic_v2', im_name)).resize((self.w, self.h))
         dense = Image.open(osp.join(dataroot, 'dense_modified', im_name)).resize((self.w, self.h))
         skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name)).resize((self.w, self.h))
-        
+
         return {
             'cloth': c,
             'image': img,
