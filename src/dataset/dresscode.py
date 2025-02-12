@@ -31,8 +31,8 @@ class DressCodeDataset(Dataset):
         super(DressCodeDataset, self).__init__()
         self.data_rootpath = data_rootpath
         self.use_augmentation = use_augmentation
-        self.h = h
-        self.w = w
+        self.h = self.height = h
+        self.w = self.width = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
 
         if self.use_augmentation:
