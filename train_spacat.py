@@ -438,7 +438,7 @@ def main():
             use_trainset=True,
             height=args.height,
             width=args.width,
-            use_dilated_relaxed_mask=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
             use_augmentation=True if args.dataset_augmentation else False
         )
         hd_test_dataset = VITONHDDataset(
@@ -446,7 +446,7 @@ def main():
             use_trainset=False,
             height=args.height,
             width=args.width,
-            use_dilated_relaxed_mask=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
             use_augmentation=True if args.dataset_augmentation else False
         )
         # DRESSCODE
@@ -455,7 +455,7 @@ def main():
             phase='train',
             h=args.height,
             w=args.width,
-            use_dilated_relaxed_mask=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
             use_augmentation=True if args.dataset_augmentation else False
         )
         dc_test_dataset = DressCodeDataset(
@@ -463,7 +463,7 @@ def main():
             phase='test',
             h=args.height,
             w=args.width,
-            use_dilated_relaxed_mask=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
             use_augmentation=True if args.dataset_augmentation else False
         )
         train_dataset = ConcatDataset([hd_train_dataset, dc_train_dataset])
@@ -473,7 +473,6 @@ def main():
             data_rootpath=args.data_dir,
             use_trainset=True,
             use_paired_data=True,
-            use_augmentation=False,
             height=args.height,
             width=args.width,
             use_CLIPVision=True,
