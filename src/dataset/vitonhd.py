@@ -5,7 +5,7 @@ import os
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
-from torchvision.transforms.functional import adjust_hue, adjust_contrast
+from torchvision.transforms.functional import adjust_hue, adjust_contrast, affine
 from PIL import Image
 from transformers import CLIPImageProcessor
 from src.utils import is_image
@@ -45,16 +45,6 @@ class VITONHDDataset(Dataset):
         if self.use_augmentation:
             # flip
             self.flip = v2.RandomHorizontalFlip(p=1)
-            # random shift
-            shift_x = random.uniform(0, 0.2)
-            shift_y = random.uniform(0, 0.2)
-            self.random_shift = v2.RandomAffine(degrees=0, translate=(shift_x, shift_y))
-            # random scale
-            self.random_scale = v2.RandomAffine(degrees=0, scale=(0.8, 1.2))
-            # hue adjustment
-            self.hue_value = random.uniform(-0.5, 0.5)
-            # contrast adjustment
-            self.contrast_factor = random.uniform(0.8, 1.2)
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
 
@@ -144,23 +134,28 @@ class VITONHDDataset(Dataset):
                 masked_img = self.flip(masked_img)
                 dp = self.flip(dp)
             if random.random() > 0.5:
-                img = adjust_hue(img, self.hue_value)
-                masked_img = adjust_hue(masked_img, self.hue_value)
-                c_raw = adjust_hue(c_raw, self.hue_value)
+                hue_value = random.uniform(-0.5, 0.5)
+                img = adjust_hue(img, hue_value)
+                masked_img = adjust_hue(masked_img, hue_value)
+                c_raw = adjust_hue(c_raw, hue_value)
             if random.random() > 0.5:
-                img = adjust_contrast(img, self.contrast_factor)
-                masked_img = adjust_contrast(masked_img, self.contrast_factor)
-                c_raw = adjust_contrast(c_raw, self.contrast_factor)
+                contrast_factor = random.random(0.8, 1.2)
+                img = adjust_contrast(img, contrast_factor)
+                masked_img = adjust_contrast(masked_img, contrast_factor)
+                c_raw = adjust_contrast(c_raw, contrast_factor)
             if random.random() > 0.5:
-                img = self.random_shift(img)
-                masked_img = self.random_shift(masked_img)
-                mask = self.random_shift(mask)
-                dp = self.random_shift(dp)
+                shift_x = random.uniform(-0.2, 0.2)
+                shift_y = random.uniform(-0.2, 0.2)
+                img = affine(img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+                masked_img = affine(masked_img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+                mask = affine(mask, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+                dp = affine(dp, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
             if random.random() > 0.5:
-                img = self.random_scale(img)
-                masked_img = self.random_scale(masked_img)
-                mask = self.random_scale(mask)
-                dp = self.random_scale(dp)
+                scale = random.random(0.8, 1.2)
+                img = affine(img, angle=0, translate=(0, 0), scale=scale, shear=0)
+                masked_img = affine(masked_img, angle=0, translate=(0, 0), scale=scale, shear=0)
+                mask = affine(mask, angle=0, translate=(0, 0), scale=scale, shear=0)
+                dp = affine(dp, angle=0, translate=(0, 0), scale=scale, shear=0)
 
         item.update({
             'im_name': img_name,
