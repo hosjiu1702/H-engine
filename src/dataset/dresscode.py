@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
+from torchvision.transforms.functional import adjust_hue, adjust_contrast
 from PIL import Image
 from transformers import CLIPImageProcessor
 from src.utils import is_image as is_valid
@@ -33,6 +34,20 @@ class DressCodeDataset(Dataset):
         self.h = h
         self.w = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
+
+        if self.use_augmentation:
+            # flip
+            self.flip = v2.RandomHorizontalFlip(p=1)
+            # random shift
+            shift_x = random.uniform(0, 0.2)
+            shift_y = random.uniform(0, 0.2)
+            self.random_shift = v2.RandomAffine(degrees=0, translate=(shift_x, shift_y))
+            # random scale
+            self.random_scale = v2.RandomAffine(degrees=0, scale=(0.8, 1.2))
+            # hue adjustment
+            self.hue_value = random.uniform(-0.5, 0.5)
+            # contrast adjustment
+            self.contrast_factor = random.uniform(0.8, 1.2)
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
         self.transform = v2.Compose(
@@ -132,6 +147,32 @@ class DressCodeDataset(Dataset):
         dense = Image.open(osp.join(dataroot, 'dense_modified', im_name))
         dense = dense.resize((self.w, self.h))
         dense = self.transform(dense)
+
+        if self.use_augmentation:
+            if random.random() > 0.5:
+                img = self.flip(img)
+                c_raw = self.flip(c_raw)
+                mask = self.flip(mask)
+                masked_img = self.flip(masked_img)
+                dp = self.flip(dp)
+            if random.random() > 0.5:
+                img = adjust_hue(img, self.hue_value)
+                masked_img = adjust_hue(masked_img, self.hue_value)
+                c_raw = adjust_hue(c_raw, self.hue_value)
+            if random.random() > 0.5:
+                img = adjust_contrast(img, self.contrast_factor)
+                masked_img = adjust_contrast(masked_img, self.contrast_factor)
+                c_raw = adjust_contrast(c_raw, self.contrast_factor)
+            if random.random() > 0.5:
+                img = self.random_shift(img)
+                masked_img = self.random_shift(masked_img)
+                mask = self.random_shift(mask)
+                dp = self.random_shift(dp)
+            if random.random() > 0.5:
+                img = self.random_scale(img)
+                masked_img = self.random_scale(masked_img)
+                mask = self.random_scale(mask)
+                dp = self.random_scale(dp)
 
         item.update({
             'im_name': im_name,
