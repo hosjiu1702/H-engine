@@ -447,7 +447,6 @@ def main():
             height=args.height,
             width=args.width,
             use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-            use_augmentation=True if args.dataset_augmentation else False
         )
         # DRESSCODE
         dc_train_dataset = DressCodeDataset(
@@ -464,7 +463,6 @@ def main():
             h=args.height,
             w=args.width,
             use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-            use_augmentation=True if args.dataset_augmentation else False
         )
         train_dataset = ConcatDataset([hd_train_dataset, dc_train_dataset])
         test_dataset = ConcatDataset([hd_test_dataset, dc_test_dataset])
@@ -486,7 +484,6 @@ def main():
             height=args.height,
             width=args.width,
             use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-            use_augmentation=True if args.dataset_augmentation else False
         )
 
     if args.use_subset:
