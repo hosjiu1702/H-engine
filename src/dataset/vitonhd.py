@@ -139,7 +139,7 @@ class VITONHDDataset(Dataset):
                 masked_img = adjust_hue(masked_img, hue_value)
                 c_raw = adjust_hue(c_raw, hue_value)
             if random.random() > 0.5:
-                contrast_factor = random.random(0.8, 1.2)
+                contrast_factor = random.uniform(0.8, 1.2)
                 img = adjust_contrast(img, contrast_factor)
                 masked_img = adjust_contrast(masked_img, contrast_factor)
                 c_raw = adjust_contrast(c_raw, contrast_factor)
@@ -151,7 +151,7 @@ class VITONHDDataset(Dataset):
                 mask = affine(mask, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
                 dp = affine(dp, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
             if random.random() > 0.5:
-                scale = random.random(0.8, 1.2)
+                scale = random.uniform(0.8, 1.2)
                 img = affine(img, angle=0, translate=(0, 0), scale=scale, shear=0)
                 masked_img = affine(masked_img, angle=0, translate=(0, 0), scale=scale, shear=0)
                 mask = affine(mask, angle=0, translate=(0, 0), scale=scale, shear=0)
