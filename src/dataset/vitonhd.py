@@ -41,7 +41,6 @@ class VITONHDDataset(Dataset):
         self.width = width
         self.use_CLIPVision = use_CLIPVision
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
-        self.mode = mode
 
         if self.use_augmentation:
             # flip
@@ -137,7 +136,7 @@ class VITONHDDataset(Dataset):
         origin_agn = masked_img = masked_img.resize((self.width, self.height))
         masked_img = self.transform(masked_img)
 
-        if self.mode == 'train' and self.use_augmentation:
+        if self.use_augmentation:
             if random.random() > 0.5:
                 img = self.flip(img)
                 c_raw = self.flip(c_raw)
