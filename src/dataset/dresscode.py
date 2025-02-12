@@ -119,9 +119,9 @@ class DressCodeDataset(Dataset):
         img = self.transform(img)
 
         # garment image
-        c = Image.open(osp.join(dataroot, 'images', c_name))
-        c = c.resize((self.w, self.h))
-        c = self.transform(c)
+        c_raw = Image.open(osp.join(dataroot, 'images', c_name))
+        c_raw = c_raw.resize((self.w, self.h))
+        c_raw = self.transform(c_raw)
 
         # mask image
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name))
@@ -182,7 +182,7 @@ class DressCodeDataset(Dataset):
             'masked_image': masked_img,
             'mask': mask,
             'densepose': dense,
-            'cloth_raw': c,
+            'cloth_raw': c_raw,
         })
 
         return item
