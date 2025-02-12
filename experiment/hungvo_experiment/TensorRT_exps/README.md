@@ -10,8 +10,13 @@
 ## Reference Link
 
 
-- [A tutorial about how to build a TensorRT Engine from a PyTorch Model with the help of ONNX](https://github.com/RizhaoCai/PyTorch_ONNX_TensorRT)
+- [A tutorial about how to build a TensorRT Engine from a PyTorch Model with the help of ONNX (code)](https://github.com/RizhaoCai/PyTorch_ONNX_TensorRT)
+- [Deploying Stable Diffusion Models with Triton and TensorRT (code)](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/tutorials/Popular_Models_Guide/StableDiffusion/README.html)
 - [Theory of TensorRT](https://viblo.asia/p/tensorrt-su-vuot-troi-voi-bai-toan-toi-uu-mo-hinh-deep-learning-y3RL1AayLao)
+
+
+
+
 
 This experiment aims to speed up stable diffusion using TensorRT
 
