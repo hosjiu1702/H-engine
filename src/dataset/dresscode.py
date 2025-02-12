@@ -144,9 +144,9 @@ class DressCodeDataset(Dataset):
         skl = self.transform(skl)
 
         # densepose image
-        dense = Image.open(osp.join(dataroot, 'dense_modified', im_name))
-        dense = dense.resize((self.w, self.h))
-        dense = self.transform(dense)
+        dp = Image.open(osp.join(dataroot, 'dense_modified', im_name))
+        dp = dp.resize((self.w, self.h))
+        dp = self.transform(dp)
 
         if self.use_augmentation:
             if random.random() > 0.5:
@@ -181,7 +181,7 @@ class DressCodeDataset(Dataset):
             'image': img,
             'masked_image': masked_img,
             'mask': mask,
-            'densepose': dense,
+            'densepose': dp,
             'cloth_raw': c_raw,
         })
 
@@ -194,18 +194,18 @@ class DressCodeDataset(Dataset):
         c_name = self.c_names[idx]
         dataroot = self.dataroot_names[idx]
 
-        c = Image.open(osp.join(dataroot, 'images', c_name)).resize((self.w, self.h))
+        c_raw = Image.open(osp.join(dataroot, 'images', c_name)).resize((self.w, self.h))
         img = Image.open(osp.join(dataroot, 'images', im_name)).resize((self.w, self.h))
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name)).resize((self.w, self.h))
-        agn = Image.open(osp.join(dataroot, 'agnostic_v2', im_name)).resize((self.w, self.h))
-        dense = Image.open(osp.join(dataroot, 'dense_modified', im_name)).resize((self.w, self.h))
+        masked_img = Image.open(osp.join(dataroot, 'agnostic_v2', im_name)).resize((self.w, self.h))
+        dp = Image.open(osp.join(dataroot, 'dense_modified', im_name)).resize((self.w, self.h))
         skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name)).resize((self.w, self.h))
 
         return {
-            'cloth': c,
+            'cloth': c_raw,
             'image': img,
             'mask': mask,
-            'agnostic': agn,
-            'dense': dense,
+            'agnostic': masked_img,
+            'dense': dp,
             'skeleton': skl
         }
