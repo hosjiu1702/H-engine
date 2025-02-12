@@ -39,7 +39,7 @@ conda activate sd1.5_inpainting_env
 Download the IP adapter using the following command:  
 ```bash
 cd models
-wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.bin
+wget https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter_sd15.bin
 ```
 
 ## Inference
