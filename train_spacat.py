@@ -325,6 +325,10 @@ def parse_args():
         action='store_true',
         help='Train only self-attention layers in UNet.'
     )
+    parser.add_argument(
+        '--dataset_augmentation',
+        action='store_true',
+    )
 
     args = parser.parse_args()
 
@@ -434,14 +438,15 @@ def main():
             use_trainset=True,
             height=args.height,
             width=args.width,
-            use_dilated_relaxed_mask=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+            use_augmentation=True if args.dataset_augmentation else False
         )
         hd_test_dataset = VITONHDDataset(
             data_rootpath=args.vitonhd_datapath,
             use_trainset=False,
             height=args.height,
             width=args.width,
-            use_dilated_relaxed_mask=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
         )
         # DRESSCODE
         dc_train_dataset = DressCodeDataset(
@@ -449,14 +454,15 @@ def main():
             phase='train',
             h=args.height,
             w=args.width,
-            use_dilated_relaxed_mask=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+            use_augmentation=True if args.dataset_augmentation else False
         )
         dc_test_dataset = DressCodeDataset(
             args.dresscode_datapath,
             phase='test',
             h=args.height,
             w=args.width,
-            use_dilated_relaxed_mask=True,
+            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
         )
         train_dataset = ConcatDataset([hd_train_dataset, dc_train_dataset])
         test_dataset = ConcatDataset([hd_test_dataset, dc_test_dataset])
@@ -465,11 +471,11 @@ def main():
             data_rootpath=args.data_dir,
             use_trainset=True,
             use_paired_data=True,
-            use_augmentation=False,
             height=args.height,
             width=args.width,
             use_CLIPVision=True,
             use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+            use_augmentation=True if args.dataset_augmentation else False
         )
 
         test_dataset = VITONHDDataset(

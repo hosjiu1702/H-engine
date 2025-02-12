@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
+from torchvision.transforms.functional import adjust_hue, adjust_contrast, affine
 from PIL import Image
 from transformers import CLIPImageProcessor
 from src.utils import is_image as is_valid
@@ -30,9 +31,13 @@ class DressCodeDataset(Dataset):
         super(DressCodeDataset, self).__init__()
         self.data_rootpath = data_rootpath
         self.use_augmentation = use_augmentation
-        self.h = h
-        self.w = w
+        self.h = self.height = h
+        self.w = self.width = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
+
+        if self.use_augmentation:
+            # flip
+            self.flip = v2.RandomHorizontalFlip(p=1)
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
         self.transform = v2.Compose(
@@ -79,14 +84,14 @@ class DressCodeDataset(Dataset):
             im_names = tmp_im
             c_names = tmp_c
             dataroot_names = tmp_dataroot
-        
+
         self.im_names = im_names
         self.c_names = c_names
         self.dataroot_names = dataroot_names
 
     def get_random_image(self):
         return self.get_random_sample()['image']
-        
+
     def __len__(self):
         return len(self.im_names)
 
@@ -104,9 +109,9 @@ class DressCodeDataset(Dataset):
         img = self.transform(img)
 
         # garment image
-        c = Image.open(osp.join(dataroot, 'images', c_name))
-        c = c.resize((self.w, self.h))
-        c = self.transform(c)
+        c_raw = Image.open(osp.join(dataroot, 'images', c_name))
+        c_raw = c_raw.resize((self.w, self.h))
+        c_raw = self.transform(c_raw)
 
         # mask image
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name))
@@ -119,9 +124,9 @@ class DressCodeDataset(Dataset):
         mask = torch.from_numpy(mask)
 
         # agnostic image (masked image)
-        agn = Image.open(osp.join(dataroot, 'agnostic_v2', im_name))
-        agn = agn.resize((self.w, self.h))
-        agn = self.transform(agn)
+        masked_img = Image.open(osp.join(dataroot, 'agnostic_v2', im_name))
+        masked_img = masked_img.resize((self.w, self.h))
+        masked_img = self.transform(masked_img)
 
         # skeleton image
         skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name))
@@ -129,19 +134,50 @@ class DressCodeDataset(Dataset):
         skl = self.transform(skl)
 
         # densepose image
-        dense = Image.open(osp.join(dataroot, 'dense_modified', im_name))
-        dense = dense.resize((self.w, self.h))
-        dense = self.transform(dense)
+        dp = Image.open(osp.join(dataroot, 'dense_modified', im_name))
+        dp = dp.resize((self.w, self.h))
+        dp = self.transform(dp)
+
+        if self.use_augmentation:
+            if random.random() > 0.5:
+                img = self.flip(img)
+                c_raw = self.flip(c_raw)
+                mask = self.flip(mask)
+                masked_img = self.flip(masked_img)
+                dp = self.flip(dp)
+            if random.random() > 0.5:
+                hue_value = random.uniform(-0.5, 0.5)
+                img = adjust_hue(img, hue_value)
+                masked_img = adjust_hue(masked_img, hue_value)
+                c_raw = adjust_hue(c_raw, hue_value)
+            if random.random() > 0.5:
+                contrast_factor = random.uniform(0.8, 1.2)
+                img = adjust_contrast(img, contrast_factor)
+                masked_img = adjust_contrast(masked_img, contrast_factor)
+                c_raw = adjust_contrast(c_raw, contrast_factor)
+            if random.random() > 0.5:
+                shift_x = random.uniform(-0.2, 0.2)
+                shift_y = random.uniform(-0.2, 0.2)
+                img = affine(img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+                masked_img = affine(masked_img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+                mask = affine(mask, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+                dp = affine(dp, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            if random.random() > 0.5:
+                scale = random.uniform(0.8, 1.2)
+                img = affine(img, angle=0, translate=(0, 0), scale=scale, shear=0)
+                masked_img = affine(masked_img, angle=0, translate=(0, 0), scale=scale, shear=0)
+                mask = affine(mask, angle=0, translate=(0, 0), scale=scale, shear=0)
+                dp = affine(dp, angle=0, translate=(0, 0), scale=scale, shear=0)
 
         item.update({
             'im_name': im_name,
             'c_name': c_name,
             'original_image': self.totensor(clone_img),
             'image': img,
-            'masked_image': agn,
+            'masked_image': masked_img,
             'mask': mask,
-            'densepose': dense,
-            'cloth_raw': c,
+            'densepose': dp,
+            'cloth_raw': c_raw,
         })
 
         return item
@@ -152,19 +188,19 @@ class DressCodeDataset(Dataset):
         im_name = self.im_names[idx]
         c_name = self.c_names[idx]
         dataroot = self.dataroot_names[idx]
-        
-        c = Image.open(osp.join(dataroot, 'images', c_name)).resize((self.w, self.h))
+
+        c_raw = Image.open(osp.join(dataroot, 'images', c_name)).resize((self.w, self.h))
         img = Image.open(osp.join(dataroot, 'images', im_name)).resize((self.w, self.h))
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name)).resize((self.w, self.h))
-        agn = Image.open(osp.join(dataroot, 'agnostic_v2', im_name)).resize((self.w, self.h))
-        dense = Image.open(osp.join(dataroot, 'dense_modified', im_name)).resize((self.w, self.h))
+        masked_img = Image.open(osp.join(dataroot, 'agnostic_v2', im_name)).resize((self.w, self.h))
+        dp = Image.open(osp.join(dataroot, 'dense_modified', im_name)).resize((self.w, self.h))
         skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name)).resize((self.w, self.h))
-        
+
         return {
-            'cloth': c,
+            'cloth': c_raw,
             'image': img,
             'mask': mask,
-            'agnostic': agn,
-            'dense': dense,
+            'agnostic': masked_img,
+            'dense': dp,
             'skeleton': skl
         }
