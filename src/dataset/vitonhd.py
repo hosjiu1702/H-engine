@@ -152,15 +152,15 @@ class VITONHDDataset(Dataset):
                 masked_img = adjust_contrast(masked_img, self.contrast_factor)
                 c_raw = adjust_contrast(c_raw, self.contrast_factor)
             if random.random() > 0.5:
-                img = self.shift(img)
-                masked_img = self.shift(masked_img)
-                mask = self.shift(mask)
-                dp = self.shift(dp)
+                img = self.random_shift(img)
+                masked_img = self.random_shift(masked_img)
+                mask = self.random_shift(mask)
+                dp = self.random_shift(dp)
             if random.random() > 0.5:
-                img = self.scale(img)
-                masked_img = self.scale(masked_img)
-                mask = self.scale(mask)
-                dp = self.scale(dp)
+                img = self.random_scale(img)
+                masked_img = self.random_scale(masked_img)
+                mask = self.random_scale(mask)
+                dp = self.random_scale(dp)
 
         item.update({
             'im_name': img_name,
