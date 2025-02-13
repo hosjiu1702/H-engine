@@ -8,7 +8,7 @@ from torchvision.transforms import v2
 from torchvision.transforms.functional import adjust_hue, adjust_contrast, affine
 from PIL import Image
 from transformers import CLIPImageProcessor
-from src.utils import is_image
+from src.utils import is_image, random_dilate_mask, mask2agn
 
 
 class VITONHDDataset(Dataset):
@@ -27,6 +27,7 @@ class VITONHDDataset(Dataset):
             use_trainset: bool = True,
             use_paired_data: bool = True,
             use_augmentation: bool = False,
+            random_dilate_mask: bool = False,
             height: int = 1024,
             width: int = 768,
             use_CLIPVision: bool = True,
@@ -41,6 +42,7 @@ class VITONHDDataset(Dataset):
         self.width = width
         self.use_CLIPVision = use_CLIPVision
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
+        self.random_dilate_mask = random_dilate_mask
 
         if self.use_augmentation:
             # flip
@@ -117,13 +119,13 @@ class VITONHDDataset(Dataset):
         # Mask
         mask = Image.open(self.m_paths[index])
         origin_m = mask = mask.resize((self.width, self.height))
+        mask = random_dilate_mask(mask) if self.random_dilate_mask else mask
         mask = self.totensor(mask.convert('L'))
         mask[mask>0.5] = 1.
         mask[mask<0.5] = 0.
 
         # Masked image (agnostic image)
-        masked_img = Image.open(self.agn_paths[index])
-        origin_agn = masked_img = masked_img.resize((self.width, self.height))
+        masked_img = mask2agn(mask, origin_img)
         masked_img = self.transform(masked_img)
 
         if self.use_augmentation:
