@@ -225,9 +225,10 @@ def mask2agn(mask: Union[np.ndarray, torch.Tensor], body: PIL.Image.Image) -> PI
 
 def random_dilate_mask(mask: PIL.Image.Image) -> PIL.Image.Image:
     mask_arr = np.array(mask)
-    iterations=1
+    iterations = 1
     mask_arr = cv.erode(mask_arr, np.ones((3, 3), np.uint8), iterations=iterations) # remove any tiny contours (non-clothing) if it exists
     contours, _ = cv.findContours(mask_arr, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    contours = sorted(list(contours), key=lambda x: x.shape[0], reverse=True)
     hull = cv.convexHull(contours[0])
     hull = np.squeeze(hull)
 
