@@ -87,8 +87,6 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
                      (parse_array == label_map['upper_clothes']).astype(np.float32) + \
                      (parse_array == label_map['skirt']).astype(np.float32) + \
                      (parse_array == label_map['pants']).astype(np.float32) + \
-                     (parse_array == label_map['left_leg']).astype(np.float32) + \
-                     (parse_array == label_map['right_leg']).astype(np.float32)
         parser_mask_changeable += np.logical_and(parse_array, np.logical_not(parser_mask_fixed))
     elif category == 'upper_body':
         parse_mask = (parse_array == label_map['upper_clothes']).astype(np.float32)
