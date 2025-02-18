@@ -328,6 +328,12 @@ def parse_args():
     parser.add_argument(
         '--dataset_augmentation',
         action='store_true',
+        help='Apply some augmentation transformation aiming to achieve better generalization in real-world scenarios. Checkout section Training & Inference Details in Supplementary Material from StableVITON (https://arxiv.org/pdf/2312.01725)'
+    )
+    parser.add_argument(
+        '--random_dilate_mask',
+        action='store_true',
+        help='This only must be applied to rigorous rectangular mask shape (v2). Checkout section 3.3 of https://arxiv.org/abs/2411.10499'
     )
 
     args = parser.parse_args()
@@ -439,7 +445,8 @@ def main():
             height=args.height,
             width=args.width,
             use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-            use_augmentation=True if args.dataset_augmentation else False
+            use_augmentation=True if args.dataset_augmentation else False,
+            random_dilate_mask=True if args.random_dilate_mask else False
         )
         hd_test_dataset = VITONHDDataset(
             data_rootpath=args.vitonhd_datapath,
@@ -455,7 +462,8 @@ def main():
             h=args.height,
             w=args.width,
             use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-            use_augmentation=True if args.dataset_augmentation else False
+            use_augmentation=True if args.dataset_augmentation else False,
+            random_dilate_mask=True if args.random_dilate_mask else False
         )
         dc_test_dataset = DressCodeDataset(
             args.dresscode_datapath,
@@ -475,7 +483,8 @@ def main():
             width=args.width,
             use_CLIPVision=True,
             use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-            use_augmentation=True if args.dataset_augmentation else False
+            use_augmentation=True if args.dataset_augmentation else False,
+            random_dilate_mask=True if args.random_dilate_mask else False
         )
 
         test_dataset = VITONHDDataset(

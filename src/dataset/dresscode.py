@@ -12,7 +12,7 @@ from torchvision.transforms import v2
 from torchvision.transforms.functional import adjust_hue, adjust_contrast, affine
 from PIL import Image
 from transformers import CLIPImageProcessor
-from src.utils import is_image as is_valid
+from src.utils import is_image as is_valid, mask2agn, random_dilate_mask
 
 
 class DressCodeDataset(Dataset):
@@ -27,6 +27,7 @@ class DressCodeDataset(Dataset):
             h: int = 1024, # height
             w: int = 768, # weight
             use_dilated_relaxed_mask: bool = False,
+            random_dilate_mask: bool = False
     ):
         super(DressCodeDataset, self).__init__()
         self.data_rootpath = data_rootpath
@@ -34,6 +35,7 @@ class DressCodeDataset(Dataset):
         self.h = self.height = h
         self.w = self.width = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
+        self.random_dilate_mask = random_dilate_mask
 
         if self.use_augmentation:
             # flip
@@ -116,6 +118,7 @@ class DressCodeDataset(Dataset):
         # mask image
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name))
         mask = mask.resize((self.w, self.h))
+        mask = random_dilate_mask(mask) if self.random_dilate_mask else mask
         mask = mask.convert('L')
         mask = mask.point(lambda i: 255 if i > 127 else 0)
         mask = mask.convert('1') # [True, False] array
@@ -124,8 +127,7 @@ class DressCodeDataset(Dataset):
         mask = torch.from_numpy(mask)
 
         # agnostic image (masked image)
-        masked_img = Image.open(osp.join(dataroot, 'agnostic_v2', im_name))
-        masked_img = masked_img.resize((self.w, self.h))
+        masked_img = mask2agn(mask, clone_img)
         masked_img = self.transform(masked_img)
 
         # skeleton image
