@@ -10,7 +10,7 @@ from ip_adapter import IPAdapter, IPAdapterPlus
 import os
 from controlnet_aux import OpenposeDetector
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler, AutoencoderKL
-from demo_inpainting_controlnet import StableDiffusionControlNetInpaintPipeline
+from stable_diffusion_tensorrt_inpaint import StableDiffusionControlNetInpaintPipeline
 import numpy as np
 
 
