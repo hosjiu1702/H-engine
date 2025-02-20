@@ -147,4 +147,6 @@ def download_images_concurrently(df):
             future.result()  # You can handle exceptions here if needed
 
 # Download images with the specified thresholds
-download_images_concurrently(merged_data)
+if __name__ == '__main__':
+    download_images_concurrently(merged_data)
+    
