@@ -14,10 +14,7 @@ load_dotenv()
 DATA_DIR_BODY = os.getenv("DATA_DIR_BODY")
 DATA_DIR_GARMENT = os.getenv("DATA_DIR_GARMENT")
 BASE_IMAGE_DIR = os.getenv("BASE_IMAGE_DIR")
-WIDTH_THRESHOLD_BODY = int(os.getenv("WIDTH_THRESHOLD_BODY"))
-HEIGHT_THRESHOLD_BODY = int(os.getenv("HEIGHT_THRESHOLD_BODY"))
-WIDTH_THRESHOLD_GARMENT = int(os.getenv("WIDTH_THRESHOLD_GARMENT"))
-HEIGHT_THRESHOLD_GARMENT = int(os.getenv("HEIGHT_THRESHOLD_GARMENT"))
+
 
 
 
@@ -125,28 +122,12 @@ def download_images_with_threshold(df, width_threshold_body, height_threshold_bo
         else:
             print(f"Skipping {product_id}")
 
-# Set width and height thresholds
-width_threshold_body = WIDTH_THRESHOLD_BODY
-height_threshold_body = HEIGHT_THRESHOLD_BODY
 
-width_threshold_garment = WIDTH_THRESHOLD_GARMENT
-height_threshold_garment = HEIGHT_THRESHOLD_GARMENT
-
-# Download images with the specified thresholds
-download_images_with_threshold(merged_data, width_threshold_body, height_threshold_body, width_threshold_garment, height_threshold_garment )
-
-
-def download_images_concurrently(df):
-    with ThreadPoolExecutor(max_workers=8) as executor:  # max_workers determines how many threads to use
-        futures = []
-        for index, row in df.iterrows():
-            futures.append(executor.submit(download_images_with_threshold, row))
-        
-        # Wait for all the downloads to finish
-        for future in as_completed(futures):
-            future.result()  # You can handle exceptions here if needed
-
-# Download images with the specified thresholds
 if __name__ == '__main__':
-    download_images_concurrently(merged_data)
-    
+
+    WIDTH_THRESHOLD_BODY = int(os.getenv("WIDTH_THRESHOLD_BODY"))
+    HEIGHT_THRESHOLD_BODY = int(os.getenv("HEIGHT_THRESHOLD_BODY"))
+    WIDTH_THRESHOLD_GARMENT = int(os.getenv("WIDTH_THRESHOLD_GARMENT"))
+    HEIGHT_THRESHOLD_GARMENT = int(os.getenv("HEIGHT_THRESHOLD_GARMENT"))
+
+    download_images_with_threshold(merged_data, WIDTH_THRESHOLD_BODY, HEIGHT_THRESHOLD_BODY, WIDTH_THRESHOLD_GARMENT, HEIGHT_THRESHOLD_GARMENT)
