@@ -35,7 +35,7 @@ os.makedirs(base_image_dir, exist_ok=True)
 def download_image(url, save_path, retries=3, delay=2):
     for attempt in range(retries):
         try:
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=60)
             response.raise_for_status()  # Raise an error for bad status codes
 
             # Open the image using PIL and save it
@@ -94,26 +94,26 @@ def download_images_with_threshold(df, width_threshold_body, height_threshold_bo
             if success_body and success_garment:
                 print(f"Successfully downloaded both images for product {product_id}")
             else:
-        # Clean up by deleting the incomplete folder
-                if not success_body:
-                    print(f"Deleting incomplete body image folder for {product_id}")
-                    if os.path.exists(type_dir_human):
-                        for root, dirs, files in os.walk(type_dir_human, topdown=False):
-                            for file in files:
-                                os.remove(os.path.join(root, file))
-                            for dir in dirs:
-                                os.rmdir(os.path.join(root, dir))
-                        os.rmdir(type_dir_human)
+                # Clean up by deleting the incomplete folder
+                #if not success_body:
+                print(f"Deleting incomplete body image folder for {product_id}")
+                if os.path.exists(type_dir_human):
+                    for root, dirs, files in os.walk(type_dir_human, topdown=False):
+                        for file in files:
+                            os.remove(os.path.join(root, file))
+                        for dir in dirs:
+                            os.rmdir(os.path.join(root, dir))
+                    os.rmdir(type_dir_human)
 
-                if not success_garment:
-                    print(f"Deleting incomplete garment image folder for {product_id}")
-                    if os.path.exists(type_dir_garment):
-                        for root, dirs, files in os.walk(type_dir_garment, topdown=False):
-                            for file in files:
-                                os.remove(os.path.join(root, file))
-                            for dir in dirs:
-                                os.rmdir(os.path.join(root, dir))
-                        os.rmdir(type_dir_garment)
+                #if not success_garment:
+                print(f"Deleting incomplete garment image folder for {product_id}")
+                if os.path.exists(type_dir_garment):
+                    for root, dirs, files in os.walk(type_dir_garment, topdown=False):
+                        for file in files:
+                            os.remove(os.path.join(root, file))
+                        for dir in dirs:
+                            os.rmdir(os.path.join(root, dir))
+                    os.rmdir(type_dir_garment)
 
                 print(f"Failed to download one or both images for product {product_id}")
 
@@ -131,3 +131,4 @@ if __name__ == '__main__':
     HEIGHT_THRESHOLD_GARMENT = int(os.getenv("HEIGHT_THRESHOLD_GARMENT"))
 
     download_images_with_threshold(merged_data, WIDTH_THRESHOLD_BODY, HEIGHT_THRESHOLD_BODY, WIDTH_THRESHOLD_GARMENT, HEIGHT_THRESHOLD_GARMENT)
+    
