@@ -40,6 +40,7 @@ from src.utils import (
 from src.models.unet_2d_condition import UNet2DConditionModel
 from src.models.attention_processor import SkipAttnProcessor
 from src.models.autoencoder_kl import AutoencoderKLForEmasc
+from src.models.pme import PriorModelEvolution
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
 from src.dataset.dresscode import DressCodeDataset
@@ -335,6 +336,11 @@ def parse_args():
         action='store_true',
         help='This only must be applied to rigorous rectangular mask shape (v2). Checkout section 3.3 of https://arxiv.org/abs/2411.10499'
     )
+    parser.add_argument(
+        '--prior_model_evolution',
+        action='store_true',
+        help='Apply Prior Model Evolution as explained in https://arxiv.org/abs/2405.18172'
+    )
 
     args = parser.parse_args()
 
@@ -408,6 +414,13 @@ def main():
     else:
         # train full unet
         set_train(unet, True) # train full unet
+
+    if args.prior_model_evolution:
+        model_evolver = PriorModelEvolution(device=unet.device.type)
+        model_evolver(unet)
+        if unet.device.type == 'cuda':
+            del model_evolver
+            torch.cuda.empty_cache()
 
     accelerator.print('\n==== Trainable Params ====')
     accelerator.print(f'VAE: {total_trainable_params(vae)}')
