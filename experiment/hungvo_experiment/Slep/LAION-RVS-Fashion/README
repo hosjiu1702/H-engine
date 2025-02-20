@@ -1,0 +1,7 @@
+# Data Preparation
+
+## Installation
+
+To run this project on your machine you need to install:
+1. Original data from <a href="https://huggingface.co/datasets/Slep/LAION-RVS-Fashion/tree/main">dataset</a> folder.
+2. Run `python data.py`.
