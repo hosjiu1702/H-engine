@@ -13,7 +13,7 @@ from src.models.utils import get_densepose_map
 from src.preprocess.openpose import OpenPose
 
 
-os.environ['PYTHONBREAKPOINT'] = '0'
+os.environ['PYTHONBREAKPOINT'] = '0' # TODO: need to remove this if possible
 IMAGE_INDICATOR_INDEX = 0
 masker = Masker()
 openpose = OpenPose(0)
@@ -40,15 +40,11 @@ def _process_mask(file_name, d: dict):
                     return
                 mask.save(save_path, quality=100, subsampling=0)
             except IndexError:
-                NUMBER_OF_ERRORS += 1
-                d.ERROR_FILENAME.append(file_path)
+                image.save(f'/tmp/{file_name}')
                 return
 
+
 def create_mask_v2_for_dresscode(base_path: Text, category: Text, overwrite=False):
-
-    NUMBER_OF_ERRORS = 0
-    ERROR_FILENAME = []
-
     target_folder = 'mask_v2'
     os.makedirs(osp.join(base_path, target_folder), exist_ok=True)
     files_list = os.listdir(osp.join(base_path, 'images'))
@@ -63,13 +59,11 @@ def create_mask_v2_for_dresscode(base_path: Text, category: Text, overwrite=Fals
             'base_path': base_path,
             'target_folder': target_folder,
             'category': category,
-            'ERROR_FILENAME': ERROR_FILENAME,
-            'overwrite': overwrite
+            'overwrite': False if overwrite == 'false' else True
         }
         pool.starmap(_process_mask, zip(files_list, repeat(SimpleNamespace(**d))))
-
-    print(f'NUMBER OF ERRORS: {NUMBER_OF_ERRORS}')
-    print(f'ERROR_LIST: {ERROR_FILENAME}')
+    
+    return
 
     
 def create_densepose_for_dresscode(base_path: Text):
