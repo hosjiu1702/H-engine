@@ -224,40 +224,43 @@ def mask2agn(mask: Union[np.ndarray, torch.Tensor], body: PIL.Image.Image) -> PI
 
 
 def random_dilate_mask(mask: PIL.Image.Image) -> PIL.Image.Image:
-    mask_arr = np.array(mask)
-    iterations = 1
-    mask_arr = cv.erode(mask_arr, np.ones((3, 3), np.uint8), iterations=iterations) # remove any tiny contours (non-clothing) if it exists
-    contours, _ = cv.findContours(mask_arr, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    contours = sorted(list(contours), key=lambda x: x.shape[0], reverse=True)
-    hull = cv.convexHull(contours[0])
-    hull = np.squeeze(hull)
+    try:
+        mask_arr = np.array(mask)
+        iterations = 1
+        mask_arr = cv.erode(mask_arr, np.ones((3, 3), np.uint8), iterations=iterations) # remove any tiny contours (non-clothing) if it exists
+        contours, _ = cv.findContours(mask_arr, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+        contours = sorted(list(contours), key=lambda x: x.shape[0], reverse=True)
+        hull = cv.convexHull(contours[0])
+        hull = np.squeeze(hull)
 
-    delta_x = random.uniform(0.001, 0.1)
-    delta_y = random.uniform(0.001, 0.3)
-    mask_width = hull[0][0] - hull[3][0]
-    mask_height = hull[1][1] - hull[0][1]
-    new_x_left = int(hull[3][0] - delta_x * mask_width)
-    new_x_right = int(hull[0][0] + delta_x * mask_width)
-    new_y = int(hull[1][1] + delta_y * mask_height)
+        delta_x = random.uniform(0.001, 0.1)
+        delta_y = random.uniform(0.001, 0.3)
+        mask_width = hull[0][0] - hull[3][0]
+        mask_height = hull[1][1] - hull[0][1]
+        new_x_left = int(hull[3][0] - delta_x * mask_width)
+        new_x_right = int(hull[0][0] + delta_x * mask_width)
+        new_y = int(hull[1][1] + delta_y * mask_height)
 
-    new_x_left = max(0, new_x_left)
-    new_x_right = min(new_x_right, mask.size[0])
-    new_y = min(new_y, mask.size[1])
+        new_x_left = max(0, new_x_left)
+        new_x_right = min(new_x_right, mask.size[0])
+        new_y = min(new_y, mask.size[1])
 
-    new_mask = cv.rectangle(
-        np.array(mask),
-        (new_x_left, hull[3][1] - iterations),
-        (hull[2][0], hull[2][1] + iterations),
-        (255, 255, 255),
-        cv.FILLED
-    )
-    new_mask = cv.rectangle(
-        new_mask,
-        (hull[0][0], hull[0][1] - iterations),
-        (new_x_right, hull[1][1] + iterations),
-        (255, 255, 255),
-        cv.FILLED
-    )
-    new_mask = cv.rectangle(new_mask, (new_x_left, hull[2][1]), (new_x_right, new_y), (255, 255, 255), cv.FILLED)
+        new_mask = cv.rectangle(
+            np.array(mask),
+            (new_x_left, hull[3][1] - iterations),
+            (hull[2][0], hull[2][1] + iterations),
+            (255, 255, 255),
+            cv.FILLED
+        )
+        new_mask = cv.rectangle(
+            new_mask,
+            (hull[0][0], hull[0][1] - iterations),
+            (new_x_right, hull[1][1] + iterations),
+            (255, 255, 255),
+            cv.FILLED
+        )
+        new_mask = cv.rectangle(new_mask, (new_x_left, hull[2][1]), (new_x_right, new_y), (255, 255, 255), cv.FILLED)
+    except IndexError:
+        return mask
 
     return PIL.Image.fromarray(new_mask)
