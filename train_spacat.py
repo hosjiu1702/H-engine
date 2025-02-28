@@ -44,7 +44,7 @@ from src.models.pme import PriorModelEvolution
 from src.pipelines.spacat_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
 from src.dataset.dresscode import DressCodeDataset
-from src.utils.training_utils import compute_snr
+from src.utils.training_utils import compute_snr, compute_dream_and_update_latents
 
 
 if is_wandb_available():
@@ -646,6 +646,17 @@ def main():
                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
 
                 unet_input = torch.cat([noisy_latents, masks, masked_image_latents, densepose_latents], dim=1) # concatenate in channel dim
+                
+                # DREAM (http://arxiv.org/abs/2312.00210)
+                unet_input, noise = compute_dream_and_update_latents(
+                    unet=unet,
+                    noise_scheduler=noise_scheduler,
+                    timesteps=timesteps,
+                    noise=noise,
+                    noisy_latents=unet_input,
+                    target=noise,
+                    encoder_hidden_states=None
+                )
                 noise_pred = unet(unet_input, timesteps, encoder_hidden_states=None).sample # Denoising or diffusion backward process
 
                 if args.snr_gamma is None:
