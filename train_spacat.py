@@ -488,25 +488,44 @@ def main():
         train_dataset = ConcatDataset([hd_train_dataset, dc_train_dataset])
         test_dataset = ConcatDataset([hd_test_dataset, dc_test_dataset])
     else:
-        train_dataset = VITONHDDataset(
-            data_rootpath=args.data_dir,
-            use_trainset=True,
-            use_paired_data=True,
-            height=args.height,
-            width=args.width,
-            use_CLIPVision=True,
-            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-            use_augmentation=True if args.dataset_augmentation else False,
-            random_dilate_mask=True if args.random_dilate_mask else False
-        )
-
-        test_dataset = VITONHDDataset(
-            data_rootpath=args.data_dir,
-            use_trainset=False,
-            height=args.height,
-            width=args.width,
-            use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
-        )
+        if args.hd:
+            train_dataset = VITONHDDataset(
+                data_rootpath=args.data_dir,
+                use_trainset=True,
+                use_paired_data=True,
+                height=args.height,
+                width=args.width,
+                use_CLIPVision=True,
+                use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+                use_augmentation=True if args.dataset_augmentation else False,
+                random_dilate_mask=True if args.random_dilate_mask else False
+            )
+            test_dataset = VITONHDDataset(
+                data_rootpath=args.data_dir,
+                use_trainset=False,
+                height=args.height,
+                width=args.width,
+                use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+            )
+        elif args.dc:
+            train_dataset = DressCodeDataset(
+                args.dresscode_datapath,
+                phase='train',
+                h=args.height,
+                w=args.width,
+                use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+                use_augmentation=True if args.dataset_augmentation else False,
+                random_dilate_mask=True if args.random_dilate_mask else False
+            )
+            test_dataset = DressCodeDataset(
+                args.dresscode_datapath,
+                phase='test',
+                h=args.height,
+                w=args.width,
+                use_dilated_relaxed_mask=True if args.use_dilated_mask else False,
+            )
+        else:
+            raise ValueError(f'No support for your dataset.')
 
     if args.use_subset:
         # get only first `num_subset_samples` samples
