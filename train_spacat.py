@@ -692,8 +692,9 @@ def main():
                             # Just for resuming when we want to continue training from the last state
                             save_path = os.path.join(args.output_dir, f'state/{global_steps}-steps') # should be added a timestamp
                             os.makedirs(save_path, exist_ok=True)
-                            accelerator.save_state(save_path, safe_serialization=False)
-                            accelerator.print(f'Saved state to {save_path}')
+                            if args.save:
+                                accelerator.save_state(save_path, safe_serialization=False)
+                                accelerator.print(f'Saved state to {save_path}')
                         # Generate to do test or validation (some kinds of sanity check)
                         if global_steps % args.validation_steps == 0:
                             unwrapped_unet = accelerator.unwrap_model(unet)
