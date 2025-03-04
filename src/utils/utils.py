@@ -261,6 +261,7 @@ def random_dilate_mask(mask: PIL.Image.Image) -> PIL.Image.Image:
         )
         new_mask = cv.rectangle(new_mask, (new_x_left, hull[2][1]), (new_x_right, new_y), (255, 255, 255), cv.FILLED)
     except IndexError:
-        return mask
+        mask.save('/tmp/mask.png')
+        raise RuntimeError
 
     return PIL.Image.fromarray(new_mask)
