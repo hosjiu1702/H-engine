@@ -194,7 +194,7 @@ class DressCodeDataset(Dataset):
         c_raw = Image.open(osp.join(dataroot, 'images', c_name)).resize((self.w, self.h))
         img = Image.open(osp.join(dataroot, 'images', im_name)).resize((self.w, self.h))
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name)).resize((self.w, self.h))
-        masked_img = Image.open(osp.join(dataroot, 'agnostic_v2', im_name)).resize((self.w, self.h))
+        masked_img = mask2agn(mask, img)
         dp = Image.open(osp.join(dataroot, 'dense_modified', im_name)).resize((self.w, self.h))
         skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name)).resize((self.w, self.h))
 
