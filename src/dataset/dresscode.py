@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
-from torchvision.transforms.functional import adjust_hue, adjust_contrast, affine
+from torchvision.transforms.functional import adjust_hue, adjust_contrast, affine, pil_to_tensor
 from PIL import Image
 from transformers import CLIPImageProcessor
 from src.utils import is_image as is_valid, mask2agn, random_dilate_mask
@@ -194,7 +194,7 @@ class DressCodeDataset(Dataset):
         c_raw = Image.open(osp.join(dataroot, 'images', c_name)).resize((self.w, self.h))
         img = Image.open(osp.join(dataroot, 'images', im_name)).resize((self.w, self.h))
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name)).resize((self.w, self.h))
-        masked_img = mask2agn(mask, img)
+        masked_img = mask2agn(pil_to_tensor(mask), img)
         dp = Image.open(osp.join(dataroot, 'dense_modified', im_name)).resize((self.w, self.h))
         skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name)).resize((self.w, self.h))
 
