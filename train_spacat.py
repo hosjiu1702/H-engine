@@ -341,6 +341,17 @@ def parse_args():
         action='store_true',
         help='Apply Prior Model Evolution as explained in https://arxiv.org/abs/2405.18172'
     )
+    parser.add_argument(
+        '--hd',
+        action='store_true',
+        help='Single VITON-HD training'
+    )
+    parser.add_argument(
+        '--dc',
+        action='store_true',
+        help='Single DRESSCODE training'
+    )
+    
 
     args = parser.parse_args()
 
