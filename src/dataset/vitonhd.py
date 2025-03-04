@@ -2,6 +2,7 @@ import random
 from typing import Text, Union, List
 from pathlib import Path
 import os
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
@@ -119,6 +120,13 @@ class VITONHDDataset(Dataset):
         # Mask
         mask = Image.open(self.m_paths[index])
         origin_m = mask = mask.resize((self.width, self.height))
+
+        ## In case mask values are not *real* binary ones.
+        mask_np = np.array(mask)
+        mask_np[mask_np > 127] = 255
+        mask_np[mask_np <= 127] = 0
+        mask = Image.fromarray(mask_np)
+        
         mask = random_dilate_mask(mask) if self.random_dilate_mask else mask
         mask = self.totensor(mask.convert('L'))
         mask[mask>0.5] = 1.

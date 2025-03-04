@@ -118,6 +118,13 @@ class DressCodeDataset(Dataset):
         # mask image
         mask = Image.open(osp.join(dataroot, 'mask_v2', im_name))
         mask = mask.resize((self.w, self.h))
+        
+        ## In case mask values are not *real* binary ones.
+        mask_np = np.array(mask)
+        mask_np[mask_np > 127] = 255
+        mask_np[mask_np <= 127] = 0
+        mask = Image.fromarray(mask_np)
+        
         mask = random_dilate_mask(mask) if self.random_dilate_mask else mask
         mask = mask.convert('L')
         mask = mask.point(lambda i: 255 if i > 127 else 0)
