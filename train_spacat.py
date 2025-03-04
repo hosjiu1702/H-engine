@@ -520,7 +520,7 @@ def main():
             )
         elif args.dc:
             train_dataset = DressCodeDataset(
-                args.dresscode_datapath,
+                args.data_dir,
                 phase='train',
                 h=args.height,
                 w=args.width,
@@ -529,7 +529,7 @@ def main():
                 random_dilate_mask=True if args.random_dilate_mask else False
             )
             test_dataset = DressCodeDataset(
-                args.dresscode_datapath,
+                args.data_dir,
                 phase='test',
                 h=args.height,
                 w=args.width,
