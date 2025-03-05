@@ -784,6 +784,8 @@ def main():
                                     use_dataparallel=False
                                 )
                                 fid_score = round(fid_score, 3)
+                                tracker = accelerator.get_tracker('wandb')
+                                tracker.log({'fid (Dresscode)': fid_score})
                                 ### END ###
 
                                 # allows to run in mixed precision mode
