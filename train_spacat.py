@@ -789,7 +789,7 @@ def main():
                                 # allows to run in mixed precision mode
                                 # not using in backward pass
                                 with torch.amp.autocast(device.type):
-                                    """ 1st test batch. """
+                                    # Generates some try-on results
                                     batch = test_batch
                                     images = pipe(
                                         image=batch['image'].to(device.type, dtype=weight_dtype),
