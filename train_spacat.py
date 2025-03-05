@@ -728,7 +728,6 @@ def main():
                                 os.makedirs(save_path, exist_ok=True)
                                 accelerator.save_state(save_path, safe_serialization=False)
                                 accelerator.print(f'Saved state to {save_path}')
-                        # some kinds of sanity check
                         if global_steps % args.validation_steps == 0:
                             unwrapped_unet = accelerator.unwrap_model(unet)                            
                             with torch.no_grad():
@@ -744,41 +743,41 @@ def main():
                                 test_set = DressCodeDataset(
                                     args.dresscode_datapath,
                                     phase='test',
-                                    order=args.order,
+                                    order='paired',
                                     h=args.height,
                                     w=args.width,
                                     use_dilated_relaxed_mask=True
                                 )
                                 test_dataloader = DataLoader(
                                     test_set,
-                                    batch_size=args.batch_size,
+                                    batch_size=2,
                                     shuffle=False,
-                                    num_workers=args.num_workers,
+                                    num_workers=8,
                                     pin_memory=True
                                 )
+                                fid_dir = "/tmp/fid/"
+                                os.makedirs(fid_dir, exist_ok=True)
                                 for idx, batch in enumerate(tqdm(test_dataloader)):
-                                    with torch.amp.autocast(args.device):
+                                    with torch.amp.autocast(accelerator.device.type):
                                         images = pipe(
-                                            image=batch['image'].to(args.device),
-                                            mask_image=batch['mask'].to(args.device),
-                                            densepose_image=batch['densepose'].to(args.device),
-                                            cloth_image=batch['cloth_raw'].to(args.device),
+                                            image=batch['image'].to(accelerator.device.type),
+                                            mask_image=batch['mask'].to(accelerator.device.type),
+                                            densepose_image=batch['densepose'].to(accelerator.device.type),
+                                            cloth_image=batch['cloth_raw'].to(accelerator.device.type),
                                             height=args.height,
                                             width=args.width,
                                             guidance_scale=1.5,
                                             num_inference_steps=40
                                         ).images
                                         for img, name in zip(images, batch['im_name']):
-                                            fid_dir = "/tmp/fid/"
-                                            os.makedirs(fid_dir, exist_ok=True)
                                             img.save(osp.join(fid_dir, f'{name}'), quality=100, subsampling=0)
 
-                                if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
+                                if not fid.test_stats_exists(name='dresscode', mode='clean'):
                                     # makes dataset statistics (features from InceptionNet-v3 by default)
                                     make_custom_stats(dataset_name='dresscode', dataset_path=args.dresscode_datapath)
                                 fid_score = fid.compute_fid(
                                     fdir1=fid_dir,
-                                    dataset_name=args.dataset_name,
+                                    dataset_name='dresscode',
                                     mode='clean',
                                     dataset_split='custom',
                                     verbose=True,
