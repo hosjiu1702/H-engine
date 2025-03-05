@@ -14,6 +14,7 @@
 import itertools
 import math
 import os
+from os import path as osp
 import argparse
 
 import torch
@@ -27,6 +28,7 @@ from tqdm import tqdm
 from torchvision.transforms.functional import to_pil_image
 from PIL import Image
 import bitsandbytes as bnb
+from cleanfid import fid
 
 from src.utils import (
     set_seed,
@@ -36,6 +38,7 @@ from src.utils import (
     generate_rand_chars,
     str2bool,
     init_attn_processor,
+    make_custom_stats
 )
 from src.models.unet_2d_condition import UNet2DConditionModel
 from src.models.attention_processor import SkipAttnProcessor
@@ -725,9 +728,9 @@ def main():
                                 os.makedirs(save_path, exist_ok=True)
                                 accelerator.save_state(save_path, safe_serialization=False)
                                 accelerator.print(f'Saved state to {save_path}')
-                        # Generate to do test or validation (some kinds of sanity check)
+                        # some kinds of sanity check
                         if global_steps % args.validation_steps == 0:
-                            unwrapped_unet = accelerator.unwrap_model(unet)
+                            unwrapped_unet = accelerator.unwrap_model(unet)                            
                             with torch.no_grad():
                                 """ Init temporarily pipeline for inferencing."""
                                 pipe = TryOnPipeline(
@@ -735,6 +738,55 @@ def main():
                                     unet=unwrapped_unet,
                                     scheduler=noise_scheduler,
                                 ).to(device)
+
+                                # FID EVALUATION
+                                ### START ###
+                                test_set = DressCodeDataset(
+                                    args.dresscode_datapath,
+                                    phase='test',
+                                    order=args.order,
+                                    h=args.height,
+                                    w=args.width,
+                                    use_dilated_relaxed_mask=True
+                                )
+                                test_dataloader = DataLoader(
+                                    test_set,
+                                    batch_size=args.batch_size,
+                                    shuffle=False,
+                                    num_workers=args.num_workers,
+                                    pin_memory=True
+                                )
+                                for idx, batch in enumerate(tqdm(test_dataloader)):
+                                    with torch.amp.autocast(args.device):
+                                        images = pipe(
+                                            image=batch['image'].to(args.device),
+                                            mask_image=batch['mask'].to(args.device),
+                                            densepose_image=batch['densepose'].to(args.device),
+                                            cloth_image=batch['cloth_raw'].to(args.device),
+                                            height=args.height,
+                                            width=args.width,
+                                            guidance_scale=1.5,
+                                            num_inference_steps=40
+                                        ).images
+                                        for img, name in zip(images, batch['im_name']):
+                                            fid_dir = "/tmp/fid/"
+                                            os.makedirs(fid_dir, exist_ok=True)
+                                            img.save(osp.join(fid_dir, f'{name}'), quality=100, subsampling=0)
+
+                                if not fid.test_stats_exists(name=args.dataset_name, mode='clean'):
+                                    # makes dataset statistics (features from InceptionNet-v3 by default)
+                                    make_custom_stats(dataset_name='dresscode', dataset_path=args.dresscode_datapath)
+                                fid_score = fid.compute_fid(
+                                    fdir1=fid_dir,
+                                    dataset_name=args.dataset_name,
+                                    mode='clean',
+                                    dataset_split='custom',
+                                    verbose=True,
+                                    use_dataparallel=False
+                                )
+                                fid_score = round(fid_score, 3)
+                                ### END ###
+
                                 # allows to run in mixed precision mode
                                 # not using in backward pass
                                 with torch.amp.autocast(device.type):
