@@ -20,9 +20,9 @@ import argparse
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset, ConcatDataset
-from diffusers import DDPMScheduler, AutoencoderKL
+from diffusers import DDPMScheduler, DDIMScheduler, AutoencoderKL
 from diffusers.utils import is_wandb_available
-from accelerate import Accelerator
+from accelerate import Accelerator, PartialState
 from accelerate.utils import ProjectConfiguration, DistributedDataParallelKwargs
 from tqdm import tqdm
 from torchvision.transforms.functional import to_pil_image
@@ -284,6 +284,12 @@ def parse_args():
         type=int,
         default=1000,
         help='Run validation every X steps.'
+    )
+    parser.add_argument(
+        '--eval_steps',
+        type=int,
+        default=10000,
+        help='Run FID evaluation every X steps.'
     )
     parser.add_argument(
         '--use_densepose',
@@ -728,8 +734,9 @@ def main():
                                 os.makedirs(save_path, exist_ok=True)
                                 accelerator.save_state(save_path, safe_serialization=False)
                                 accelerator.print(f'Saved state to {save_path}')
-                        if global_steps % args.validation_steps == 0:
-                            unwrapped_unet = accelerator.unwrap_model(unet)                            
+                        if global_steps % args.eval_steps == 0:
+                            # FID Evaluation
+                            unwrapped_unet = accelerator.unwrap_model(unet)
                             with torch.no_grad():
                                 """ Init temporarily pipeline for inferencing."""
                                 pipe = TryOnPipeline(
@@ -738,8 +745,6 @@ def main():
                                     scheduler=noise_scheduler,
                                 ).to(device)
 
-                                # FID EVALUATION
-                                ### START ###
                                 test_set = DressCodeDataset(
                                     args.dresscode_datapath,
                                     phase='test',
@@ -750,27 +755,33 @@ def main():
                                 )
                                 test_dataloader = DataLoader(
                                     test_set,
-                                    batch_size=2,
+                                    batch_size=torch.cuda.device_count(),
                                     shuffle=False,
-                                    num_workers=8,
+                                    num_workers=16,
                                     pin_memory=True
                                 )
+
                                 fid_dir = "/tmp/fid/"
                                 os.makedirs(fid_dir, exist_ok=True)
-                                for idx, batch in enumerate(tqdm(test_dataloader)):
-                                    with torch.amp.autocast(accelerator.device.type):
-                                        images = pipe(
-                                            image=batch['image'].to(accelerator.device.type),
-                                            mask_image=batch['mask'].to(accelerator.device.type),
-                                            densepose_image=batch['densepose'].to(accelerator.device.type),
-                                            cloth_image=batch['cloth_raw'].to(accelerator.device.type),
-                                            height=args.height,
-                                            width=args.width,
-                                            guidance_scale=1.5,
-                                            num_inference_steps=40
-                                        ).images
-                                        for img, name in zip(images, batch['im_name']):
-                                            img.save(osp.join(fid_dir, f'{name}'), quality=100, subsampling=0)
+
+                                distributed_state = PartialState()
+                                pipe.to(distributed_state.device)
+
+                                for _, batch in enumerate(tqdm(test_dataloader)):
+                                    with distributed_state.split_between_processes(batch) as input:
+                                        with torch.amp.autocast(accelerator.device.type):
+                                            images = pipe(
+                                                image=input['image'].to(accelerator.device.type),
+                                                mask_image=input['mask'].to(accelerator.device.type),
+                                                densepose_image=input['densepose'].to(accelerator.device.type),
+                                                cloth_image=input['cloth_raw'].to(accelerator.device.type),
+                                                height=args.height,
+                                                width=args.width,
+                                                guidance_scale=1.5,
+                                                num_inference_steps=30
+                                            ).images
+                                            for img, name in zip(images, batch['im_name']):
+                                                img.save(osp.join(fid_dir, f'{name}'), quality=100, subsampling=0)
 
                                 if not fid.test_stats_exists(name='dresscode', mode='clean'):
                                     # makes dataset statistics (features from InceptionNet-v3 by default)
@@ -786,8 +797,18 @@ def main():
                                 fid_score = round(fid_score, 3)
                                 tracker = accelerator.get_tracker('wandb')
                                 tracker.log({'fid (Dresscode)': fid_score})
-                                ### END ###
-
+                                del unwrapped_unet
+                                del pipe
+                                torch.cuda.empty_cache()
+                        if global_steps % args.validation_steps == 0:
+                            unwrapped_unet = accelerator.unwrap_model(unet)                            
+                            """ Init temporarily pipeline for inferencing."""
+                            pipe = TryOnPipeline(
+                                vae=vae,
+                                unet=unwrapped_unet,
+                                scheduler=noise_scheduler,
+                            ).to(device)
+                            with torch.no_grad():
                                 # allows to run in mixed precision mode
                                 # not using in backward pass
                                 with torch.amp.autocast(device.type):
@@ -800,7 +821,8 @@ def main():
                                         cloth_image=batch['cloth_raw'].to(device.type, dtype=weight_dtype),
                                         height=args.height,
                                         width=args.width,
-                                        guidance_scale=1.5
+                                        guidance_scale=1.5,
+                                        num_inference_steps=30
                                     ).images # pil
                                     img_path = os.path.join(args.output_dir, 'images')
                                     os.makedirs(img_path, exist_ok=True)
