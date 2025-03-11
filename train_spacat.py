@@ -510,7 +510,7 @@ def main():
     else:
         if args.hd:
             train_dataset = VITONHDDataset(
-                data_rootpath=args.data_dir,
+                data_rootpath=args.vitonhd_datapath,
                 use_trainset=True,
                 use_paired_data=True,
                 height=args.height,
@@ -521,7 +521,7 @@ def main():
                 random_dilate_mask=True if args.random_dilate_mask else False
             )
             test_dataset = VITONHDDataset(
-                data_rootpath=args.data_dir,
+                data_rootpath=args.vitonhd_datapath,
                 use_trainset=False,
                 height=args.height,
                 width=args.width,
@@ -529,7 +529,7 @@ def main():
             )
         elif args.dc:
             train_dataset = DressCodeDataset(
-                args.data_dir,
+                args.dresscode_datapath,
                 phase='train',
                 h=args.height,
                 w=args.width,
@@ -538,7 +538,7 @@ def main():
                 random_dilate_mask=True if args.random_dilate_mask else False
             )
             test_dataset = DressCodeDataset(
-                args.data_dir,
+                args.dresscode_datapath,
                 phase='test',
                 h=args.height,
                 w=args.width,
