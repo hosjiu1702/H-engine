@@ -47,7 +47,7 @@ from src.models.pme import PriorModelEvolution
 from src.models.poseguider import PoseGuider
 from src.models.reference_net import ReferenceNet
 from src.models.reference_net_attention import ReferenceNetAttention
-from src.pipelines.spacat_pipeline import TryOnPipeline
+from src.pipelines.refnet_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
 from src.dataset.dresscode import DressCodeDataset
 from src.utils.training_utils import compute_snr
@@ -401,7 +401,7 @@ def main():
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
     refnet = ReferenceNet.from_pretrained('stable-diffusion-v1-5/stable-diffusion-v1-5', subfolder='unet', use_safetensors=False)
     poseguider = PoseGuider(noise_latent_channels=9)
-    
+
     reference_control_writer = ReferenceNetAttention(refnet, mode='write')
     reference_control_reader = ReferenceNetAttention(unet, mode='read')
 
@@ -658,7 +658,6 @@ def main():
     test_batch = next(iter(test_dataloader))
     for epoch in range(start_epoch, args.num_train_epochs):
         unet.train()
-        refnet.train()
         poseguider.train()
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
@@ -830,12 +829,17 @@ def main():
                                 del pipe
                                 torch.cuda.empty_cache()
                         if global_steps % args.validation_steps == 0:
-                            unwrapped_unet = accelerator.unwrap_model(unet)                            
+                            unwrapped_unet = accelerator.unwrap_model(unet)
+                            unwrapped_poseguider = accelerator.unwrap_model(poseguider)
                             pipe = TryOnPipeline(
-                                vae=vae,
                                 unet=unwrapped_unet,
+                                refnet=refnet,
+                                poseguider=unwrapped_poseguider,
+                                reference_control_writer=reference_control_writer,
+                                reference_control_reader=reference_control_reader,
+                                vae=vae,
                                 scheduler=noise_scheduler,
-                            ).to(device)
+                            )
                             with torch.no_grad():
                                 # allows to run in mixed precision mode
                                 # not using in backward pass
@@ -849,7 +853,7 @@ def main():
                                         cloth_image=batch['cloth_raw'].to(device.type, dtype=weight_dtype),
                                         height=args.height,
                                         width=args.width,
-                                        guidance_scale=1.5,
+                                        guidance_scale=1.,
                                         num_inference_steps=30
                                     ).images # pil
                                     img_path = os.path.join(args.output_dir, 'images')
@@ -875,6 +879,7 @@ def main():
                                 save_path = os.path.join(args.output_dir, f'checkpoint/{global_steps}-steps')
                                 pipe.save_pretrained(save_path)
                             del unwrapped_unet
+                            del unwrapped_poseguider
                             del pipe
                             torch.cuda.empty_cache()
                 logs = {'step_loss': loss.detach().item()}

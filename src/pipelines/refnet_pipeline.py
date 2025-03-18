@@ -175,6 +175,8 @@ class TryOnPipeline(
         poseguider: PoseGuider,
         vae: Union[AutoencoderKL],
         scheduler: KarrasDiffusionSchedulers,
+        reference_control_writer: ReferenceNetAttention,
+        reference_control_reader: ReferenceNetAttention,
         text_encoder: CLIPTextModel = None,
         tokenizer: CLIPTokenizer = None,
         feature_extractor: CLIPImageProcessor = None,
@@ -287,7 +289,6 @@ class TryOnPipeline(
         )
         self.weight_dtype = weight_dtype
         self.register_to_config(requires_safety_checker=requires_safety_checker)
-
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_image
     def encode_image(self, image, device, num_images_per_prompt, output_hidden_states=None):
@@ -884,7 +885,7 @@ class TryOnPipeline(
         # mask_concat = torch.cat([mask, torch.zeros_like(mask)], dim=concat_dim)
 
         latents = randn_tensor(
-            shape=masked_image_latents_concat.shape,
+            shape=masked_image_latents.shape,
             generator=generator,
             device=device,
             dtype=self.weight_dtype)
