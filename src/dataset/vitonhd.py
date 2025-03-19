@@ -32,6 +32,7 @@ class VITONHDDataset(Dataset):
             height: int = 1024,
             width: int = 768,
             use_CLIPVision: bool = True,
+            clip_model_id: str = 'openai/clip-vit-base-patch32' # huggingface model id
             use_dilated_relaxed_mask: bool = False,
     ):
         super(VITONHDDataset, self).__init__()
@@ -52,7 +53,7 @@ class VITONHDDataset(Dataset):
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
 
         if use_CLIPVision:
-            self.image_processor = CLIPImageProcessor()
+            self.image_processor = CLIPImageProcessor(clip_model_id)
 
         mode = 'train' if self.use_trainset else 'test'
         datapath = os.path.join(data_rootpath, mode)
@@ -182,7 +183,7 @@ class VITONHDDataset(Dataset):
             # 'original_masked_image': self.totensor(origin_agn),
             # 'original_densepose': self.totensor(origin_dp),
             # 'original_cloth_path': str(self.c_paths[index]),
-            # 'cloth': c,
+            'cloth_ref': c,
         })
 
         return item

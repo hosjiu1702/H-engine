@@ -40,7 +40,7 @@ from src.utils import (
     init_attn_processor,
     make_custom_stats
 )
-from src.models.unet_2d_condition import UNet2DConditionModel
+from src.models.denoising_unet import UNet2DConditionModel
 from src.models.attention_processor import SkipAttnProcessor
 from src.models.autoencoder_kl import AutoencoderKLForEmasc
 from src.models.pme import PriorModelEvolution
@@ -63,6 +63,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Training Script')
     parser.add_argument(
         '--pretrained_model_name_or_path',
+        type=str,
+        default='stable-diffusion-v1-5/stable-diffusion-inpainting',
+        required=False,
+        help='Path to pretrained model or model identifier from huggingface.co/models'
+    )
+    parser.add_argument(
+        '--refnet_model',
         type=str,
         default='stable-diffusion-v1-5/stable-diffusion-inpainting',
         required=False,
@@ -364,8 +371,7 @@ def parse_args():
         '--dc',
         action='store_true',
         help='Single DRESSCODE training'
-    )
-    
+    )    
 
     args = parser.parse_args()
 
@@ -400,15 +406,17 @@ def main():
     noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler')
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder='vae', use_safetensors=False, torch_dtype=torch.float16)
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
-    refnet = ReferenceNet.from_pretrained('stable-diffusion-v1-5/stable-diffusion-v1-5', subfolder='unet', use_safetensors=False)
+    refnet = ReferenceNet.from_pretrained(args.refnet_model, subfolder='unet', use_safetensors=False)
     poseguider = PoseGuider(noise_latent_channels=9)
-    image_encoder = ReferenceEncoder()
+    image_encoder = ReferenceEncoder(model_path=args.image_encoder_path)
+    
+    modules = [vae, unet, refnet, poseguider, image_encoder]
 
     reference_control_writer = ReferenceNetAttention(refnet, mode='write')
     reference_control_reader = ReferenceNetAttention(unet, mode='read')
 
-    init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
-    init_attn_processor(refnet, cross_attn_cls=SkipAttnProcessor)
+    # init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
+    # init_attn_processor(refnet, cross_attn_cls=SkipAttnProcessor)
     #from xformers.ops import memory_efficient_attention
     #unet.set_attn_processor(memory_efficient_attention)
 
@@ -434,9 +442,10 @@ def main():
     #         unet.config.in_channels = new_in_channels
 
     set_train(vae, False)
-    set_train(poseguider, True)
     set_train(refnet, False)
+    set_train(poseguider, True)
     set_train(unet, True)
+    set_train(image_encoder, True)
 
     # if args.train_self_attn_only:
     #     # Train only self-attention layers.
@@ -458,9 +467,14 @@ def main():
     #         torch.cuda.empty_cache()
 
     accelerator.print('\n==== Trainable Params ====')
-    accelerator.print(f'UNet: {total_trainable_params(unet)}')
-    accelerator.print(f'Reference Net: {total_trainable_params(refnet)}')
-    accelerator.print(f'Pose Guider: {total_trainable_params(poseguider)}')
+    trainable_params = 0
+    for m in modules:
+        s = total_trainable_params(m)
+        if s > 0:
+            accelerator.print(f'* {type(m).__name__}: {s}')
+            trainable_params += s
+    accelerator.print('=====================')
+    accelerator.print(f'Total: {trainable_params}')
 
     # Enable TF32 for faster training on Ampere GPUs (and later)
     if args.allow_tf32:
@@ -472,7 +486,7 @@ def main():
         optimizer_class = torch.optim.AdamW
 
     # Define optimizer
-    params_to_opt = itertools.chain(unet.parameters(), poseguider.parameters()) # IP-Adapter was already joined into unet
+    params_to_opt = itertools.chain(unet.parameters(), poseguider.parameters(), image_encoder.parameters())
     optimizer = optimizer_class(
         params_to_opt,
         lr=args.lr,
@@ -481,7 +495,6 @@ def main():
         weight_decay=args.adam_weight_decay,
     )
 
-    # Load dataset for training
     if args.downscale:
         vars(args)['height'] = args.height // 2
         vars(args)['width'] = args.width // 2
@@ -608,7 +621,7 @@ def main():
     # * Device Placement
     # * Gradient Synchronization
     # * what else?
-    unet, refnet, poseguider, optimizer, train_dataloader, test_dataloader = accelerator.prepare(unet, refnet, poseguider, optimizer, train_dataloader, test_dataloader)
+    unet, refnet, image_encoder, poseguider, optimizer, train_dataloader, test_dataloader = accelerator.prepare(unet, refnet, image_encoder, poseguider, optimizer, train_dataloader, test_dataloader)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     # (actually I don't know why this could happen :|)
@@ -661,13 +674,15 @@ def main():
     for epoch in range(start_epoch, args.num_train_epochs):
         unet.train()
         poseguider.train()
+        image_encoder.train()
+
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
             if args.progressive_training and epoch == start_epoch and step < resume_step:
                 if step % args.gradient_accumulation_steps == 0:
                     progress_bar.update(1)
                 continue
-            with accelerator.accumulate(unet), accelerator.accumulate(poseguider):
+            with accelerator.accumulate(unet), accelerator.accumulate(poseguider), accelerator.accumulate(image_encoder):
                 # Get inputs for denoising unet (Pixel Space --> Latent Space)
                 image_latents = vae.encode(batch['image'].to(dtype=weight_dtype)).latent_dist.sample()
                 image_latents = image_latents * vae.config.scaling_factor
@@ -680,12 +695,15 @@ def main():
 
                 masks = batch['mask'].to(dtype=weight_dtype)
                 masks = F.interpolate(masks, size=(args.height//8, args.width//8))
+                
+                image_ref = batch['cloth_ref']
 
                 # Move to device (e.g, GPUs)
                 image_latents.to(device, dtype=weight_dtype)
                 masked_image_latents.to(device, dtype=weight_dtype)
                 densepose_latents.to(device, dtype=weight_dtype)
                 masks.to(device, dtype=weight_dtype)
+                image_ref.to(device, dtype=weight_dtype)
 
                 # Add Gaussian noise to input for each timestep
                 # this is diffusion forward pass
@@ -700,12 +718,14 @@ def main():
                 refnet(cloth_latents, ref_timesteps, None)
                 reference_control_reader.update(reference_control_writer)
 
+                encoder_hidden_states = image_encoder(image_ref)
+
                 # Denoising unet
                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
                 concat_latents = torch.cat([noisy_latents, masks, masked_image_latents], dim=1) # concatenate in channel dim
                 pose_latents = poseguider(batch['densepose'].to(dtype=weight_dtype))
                 unet_input = concat_latents + pose_latents
-                noise_pred = unet(unet_input, timesteps, encoder_hidden_states=None).sample # Denoising or diffusion backward process
+                noise_pred = unet(unet_input, timesteps, encoder_hidden_states=encoder_hidden_states).sample # Denoising or diffusion backward process
 
                 if args.snr_gamma is None:
                     loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss
@@ -826,10 +846,12 @@ def main():
                         if global_steps % args.validation_steps == 0:
                             unwrapped_unet = accelerator.unwrap_model(unet)
                             unwrapped_poseguider = accelerator.unwrap_model(poseguider)
+                            unwrapped_image_encoder = accelerator.unwrap_model(image_encoder)
                             pipe = TryOnPipeline(
                                 unet=unwrapped_unet,
                                 refnet=refnet,
                                 poseguider=unwrapped_poseguider,
+                                image_encoder=unwrapped_image_encoder,
                                 reference_control_writer=reference_control_writer,
                                 reference_control_reader=reference_control_reader,
                                 vae=vae,

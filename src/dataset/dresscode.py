@@ -26,6 +26,8 @@ class DressCodeDataset(Dataset):
             use_augmentation: bool = False,
             h: int = 1024, # height
             w: int = 768, # weight
+            use_clip: bool = True,
+            clip_model_id: str = 'openai/clip-vit-base-patch32',
             use_dilated_relaxed_mask: bool = False,
             random_dilate_mask: bool = False
     ):
@@ -36,6 +38,9 @@ class DressCodeDataset(Dataset):
         self.w = self.width = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
         self.random_dilate_mask = random_dilate_mask
+        
+        if use_clip:
+            self.image_processor = CLIPImageProcessor.from_pretrained(clip_model_id)
 
         if self.use_augmentation:
             # flip
@@ -110,6 +115,11 @@ class DressCodeDataset(Dataset):
         clone_img = img.copy()
         img = self.transform(img)
 
+        # Cloth
+        c = Image.open(osp.join(dataroot, 'images', c_name))
+        c = self.image_processor(images=c, return_tensors='pt').pixel_values
+        c = c.squeeze(0)
+        
         # garment image
         c_raw = Image.open(osp.join(dataroot, 'images', c_name))
         c_raw = c_raw.resize((self.w, self.h))
@@ -187,6 +197,7 @@ class DressCodeDataset(Dataset):
             'mask': mask,
             'densepose': dp,
             'cloth_raw': c_raw,
+            'cloth_ref': c
         })
 
         return item
