@@ -734,8 +734,8 @@ def main():
                 # so it obscures too much things under the hood making it
                 # very hard to understand how everything is going on
                 accelerator.backward(loss)
-                if accelerator.sync_gradients:
-                    accelerator.clip_grad_norm_(unet.parameters(), 1.0)
+                # if accelerator.sync_gradients:
+                #     accelerator.clip_grad_norm_(unet.parameters(), 1.0)
                 optimizer.step()
                 optimizer.zero_grad()
 
