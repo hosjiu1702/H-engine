@@ -46,6 +46,7 @@ from src.models.autoencoder_kl import AutoencoderKLForEmasc
 from src.models.pme import PriorModelEvolution
 from src.models.poseguider import PoseGuider
 from src.models.reference_net import ReferenceNet
+from src.models.reference_encoder import ReferenceEncoder
 from src.models.reference_net_attention import ReferenceNetAttention
 from src.pipelines.refnet_pipeline import TryOnPipeline
 from src.dataset.vitonhd import VITONHDDataset
@@ -401,6 +402,7 @@ def main():
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
     refnet = ReferenceNet.from_pretrained('stable-diffusion-v1-5/stable-diffusion-v1-5', subfolder='unet', use_safetensors=False)
     poseguider = PoseGuider(noise_latent_channels=9)
+    image_encoder = ReferenceEncoder()
 
     reference_control_writer = ReferenceNetAttention(refnet, mode='write')
     reference_control_reader = ReferenceNetAttention(unet, mode='read')
@@ -666,7 +668,6 @@ def main():
                     progress_bar.update(1)
                 continue
             with accelerator.accumulate(unet), accelerator.accumulate(poseguider):
-                concat_dim = -1
                 # Get inputs for denoising unet (Pixel Space --> Latent Space)
                 image_latents = vae.encode(batch['image'].to(dtype=weight_dtype)).latent_dist.sample()
                 image_latents = image_latents * vae.config.scaling_factor
@@ -679,12 +680,6 @@ def main():
 
                 masks = batch['mask'].to(dtype=weight_dtype)
                 masks = F.interpolate(masks, size=(args.height//8, args.width//8))
-
-                # Concat in spatial dim (in latent space)
-                # masks = torch.cat([masks, torch.zeros_like(masks)], dim=concat_dim)
-                # masked_image_latents = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
-                # densepose_latents = torch.cat([densepose_latents, cloth_latents], dim=concat_dim)
-                # image_latents = torch.cat([image_latents, cloth_latents], dim=concat_dim)
 
                 # Move to device (e.g, GPUs)
                 image_latents.to(device, dtype=weight_dtype)
