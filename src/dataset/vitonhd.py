@@ -127,8 +127,10 @@ class VITONHDDataset(Dataset):
         mask_np[mask_np > 127] = 255
         mask_np[mask_np <= 127] = 0
         mask = Image.fromarray(mask_np)
-        
-        mask = random_dilate_mask(mask) if self.random_dilate_mask else mask
+
+        if self.random_dilate_mask:
+            if random.random() > 0.5:
+                mask = random_dilate_mask(mask)
         mask = self.totensor(mask.convert('L'))
         mask[mask>0.5] = 1.
         mask[mask<0.5] = 0.
