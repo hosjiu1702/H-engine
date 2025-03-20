@@ -32,7 +32,7 @@ class VITONHDDataset(Dataset):
             height: int = 1024,
             width: int = 768,
             use_CLIPVision: bool = True,
-            clip_model_id: str = 'openai/clip-vit-base-patch32' # huggingface model id
+            clip_model_id: str = 'openai/clip-vit-base-patch32', # huggingface model id
             use_dilated_relaxed_mask: bool = False,
     ):
         super(VITONHDDataset, self).__init__()
