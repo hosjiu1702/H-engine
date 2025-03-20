@@ -442,10 +442,10 @@ def main():
     #         unet.config.in_channels = new_in_channels
 
     set_train(vae, False)
+    set_train(image_encoder, False)
     set_train(refnet, True)
     set_train(poseguider, True)
     set_train(unet, True)
-    set_train(image_encoder, True)
 
     # if args.train_self_attn_only:
     #     # Train only self-attention layers.
@@ -489,7 +489,6 @@ def main():
     params_to_opt = itertools.chain(
         unet.parameters(),
         poseguider.parameters(),
-        image_encoder.parameters(),
         refnet.parameters()
     )
     optimizer = optimizer_class(
@@ -680,7 +679,6 @@ def main():
         unet.train()
         refnet.train()
         poseguider.train()
-        image_encoder.train()
 
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
@@ -688,7 +686,7 @@ def main():
                 if step % args.gradient_accumulation_steps == 0:
                     progress_bar.update(1)
                 continue
-            with accelerator.accumulate(unet), accelerator.accumulate(poseguider), accelerator.accumulate(image_encoder):
+            with accelerator.accumulate(unet), accelerator.accumulate(poseguider), accelerator.accumulate(refnet):
                 # Get inputs for denoising unet (Pixel Space --> Latent Space)
                 image_latents = vae.encode(batch['image'].to(dtype=weight_dtype)).latent_dist.sample()
                 image_latents = image_latents * vae.config.scaling_factor
@@ -851,13 +849,13 @@ def main():
                                 torch.cuda.empty_cache()
                         if global_steps % args.validation_steps == 0:
                             unwrapped_unet = accelerator.unwrap_model(unet)
+                            unwrapped_refnet = accelerator.unwrap_model(refnet)
                             unwrapped_poseguider = accelerator.unwrap_model(poseguider)
-                            unwrapped_image_encoder = accelerator.unwrap_model(image_encoder)
                             pipe = TryOnPipeline(
                                 unet=unwrapped_unet,
-                                refnet=refnet,
+                                refnet=unwrapped_refnet,
                                 poseguider=unwrapped_poseguider,
-                                reference_encoder=unwrapped_image_encoder,
+                                reference_encoder=image_encoder,
                                 reference_control_writer=reference_control_writer,
                                 reference_control_reader=reference_control_reader,
                                 vae=vae,
@@ -903,8 +901,8 @@ def main():
                                 save_path = os.path.join(args.output_dir, f'checkpoint/{global_steps}-steps')
                                 pipe.save_pretrained(save_path)
                             del unwrapped_unet
+                            del unwrapped_refnet
                             del unwrapped_poseguider
-                            del unwrapped_image_encoder
                             del pipe
                             torch.cuda.empty_cache()
                 logs = {'step_loss': loss.detach().item()}
