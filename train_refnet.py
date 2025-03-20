@@ -712,13 +712,13 @@ def main():
                 timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bs,), device=device) # DDIM Scheduler
                 timesteps = timesteps.long()
 
+                encoder_hidden_states = image_encoder(image_ref).unsqueeze(1)
+                
                 # Get self-attention features from reference net
                 # and inject it into denoising unet
                 ref_timesteps = torch.zeros_like(timesteps) # why zero out noise?
-                refnet(cloth_latents, ref_timesteps, None)
+                refnet(cloth_latents, ref_timesteps, encoder_hidden_states)
                 reference_control_reader.update(reference_control_writer)
-
-                encoder_hidden_states = image_encoder(image_ref)
 
                 # Denoising unet
                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
@@ -851,7 +851,7 @@ def main():
                                 unet=unwrapped_unet,
                                 refnet=refnet,
                                 poseguider=unwrapped_poseguider,
-                                image_encoder=unwrapped_image_encoder,
+                                reference_encoder=unwrapped_image_encoder,
                                 reference_control_writer=reference_control_writer,
                                 reference_control_reader=reference_control_reader,
                                 vae=vae,
@@ -868,6 +868,7 @@ def main():
                                         mask_image=batch['mask'].to(device.type, dtype=weight_dtype),
                                         densepose_image=batch['densepose'].to(device.type, dtype=weight_dtype),
                                         cloth_image=batch['cloth_raw'].to(device.type, dtype=weight_dtype),
+                                        cloth_ref_image=batch['cloth_ref'].to(device.type, dtype=weight_dtype),
                                         height=args.height,
                                         width=args.width,
                                         guidance_scale=1.,
@@ -897,6 +898,7 @@ def main():
                                 pipe.save_pretrained(save_path)
                             del unwrapped_unet
                             del unwrapped_poseguider
+                            del unwrapped_image_encoder
                             del pipe
                             torch.cuda.empty_cache()
                 logs = {'step_loss': loss.detach().item()}

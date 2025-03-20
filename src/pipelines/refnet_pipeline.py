@@ -43,6 +43,7 @@ from src.models.autoencoder_kl import AutoencoderKLForEmasc
 from src.models.poseguider import PoseGuider
 from src.models.reference_net import ReferenceNet
 from src.models.reference_net_attention import ReferenceNetAttention
+from src.models.reference_encoder import ReferenceEncoder
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -164,7 +165,7 @@ class TryOnPipeline(
     """
 
     model_cpu_offload_seq = "text_encoder->image_encoder->unet->vae"
-    _optional_components = ["safety_checker", "feature_extractor", "image_encoder"]
+    _optional_components = ["safety_checker", "feature_extractor"]
     _exclude_from_cpu_offload = ["safety_checker"]
     _callback_tensor_inputs = ["latents", "prompt_embeds", "negative_prompt_embeds", "mask", "masked_image_latents"]
 
@@ -177,6 +178,7 @@ class TryOnPipeline(
         scheduler: KarrasDiffusionSchedulers,
         reference_control_writer: ReferenceNetAttention,
         reference_control_reader: ReferenceNetAttention,
+        reference_encoder: ReferenceEncoder,
         text_encoder: CLIPTextModel = None,
         tokenizer: CLIPTokenizer = None,
         feature_extractor: CLIPImageProcessor = None,
@@ -266,12 +268,12 @@ class TryOnPipeline(
             unet=unet,
             refnet=refnet,
             poseguider=poseguider,
+            reference_encoder=reference_encoder,
             reference_control_writer=reference_control_writer,
             reference_control_reader=reference_control_reader,
             scheduler=scheduler,
             safety_checker=safety_checker,
             feature_extractor=feature_extractor,
-            image_encoder=image_encoder,
         )
         self.emasc = emasc
         self.emasc_layers = emasc_layers
@@ -588,6 +590,7 @@ class TryOnPipeline(
         mask_image: PipelineImageInput = None,
         densepose_image: PipelineImageInput = None,
         cloth_image: PipelineImageInput = None,
+        cloth_ref_image: PipelineImageInput = None,
         masked_image_latents: torch.Tensor = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -878,12 +881,6 @@ class TryOnPipeline(
         cloth_latents = cloth_latents * self.vae.config.scaling_factor
         cloth_latents.to(device=device, dtype=self.weight_dtype)
 
-        # Spatial Dimension Concatenation
-        # concat_dim = -1
-        # masked_image_latents_concat = torch.cat([masked_image_latents, cloth_latents], dim=concat_dim)
-        # densepose_latents_concat = torch.cat([densepose_latents, cloth_latents], dim=concat_dim)
-        # mask_concat = torch.cat([mask, torch.zeros_like(mask)], dim=concat_dim)
-
         latents = randn_tensor(
             shape=masked_image_latents.shape,
             generator=generator,
@@ -915,11 +912,13 @@ class TryOnPipeline(
                 if self.interrupt:
                     continue
 
-                self.refnet(cloth_latents, torch.zeros_like(t), None)
+                encoder_hidden_states = self.reference_encoder(cloth_ref_image).to(device=device, dtype=self.weight_dtype).unsqueeze(1)
+                self.refnet(cloth_latents, torch.zeros_like(t), encoder_hidden_states)
                 self.reference_control_reader.update(self.reference_control_writer)
 
+                # pose embeddings
                 pose_latents = self.poseguider(densepose_image).to(device=device, dtype=self.weight_dtype)
-
+                
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
@@ -930,7 +929,7 @@ class TryOnPipeline(
                 noise_pred = self.unet(
                     latent_model_input,
                     t,
-                    encoder_hidden_states=None,
+                    encoder_hidden_states=encoder_hidden_states,
                     cross_attention_kwargs=self.cross_attention_kwargs,
                     return_dict=False,
                 )[0]
