@@ -442,7 +442,7 @@ def main():
     #         unet.config.in_channels = new_in_channels
 
     set_train(vae, False)
-    set_train(refnet, False)
+    set_train(refnet, True)
     set_train(poseguider, True)
     set_train(unet, True)
     set_train(image_encoder, True)
@@ -486,7 +486,12 @@ def main():
         optimizer_class = torch.optim.AdamW
 
     # Define optimizer
-    params_to_opt = itertools.chain(unet.parameters(), poseguider.parameters(), image_encoder.parameters())
+    params_to_opt = itertools.chain(
+        unet.parameters(),
+        poseguider.parameters(),
+        image_encoder.parameters(),
+        refnet.parameters()
+    )
     optimizer = optimizer_class(
         params_to_opt,
         lr=args.lr,
@@ -673,6 +678,7 @@ def main():
     test_batch = next(iter(test_dataloader))
     for epoch in range(start_epoch, args.num_train_epochs):
         unet.train()
+        refnet.train()
         poseguider.train()
         image_encoder.train()
 
