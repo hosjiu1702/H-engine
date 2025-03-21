@@ -18,6 +18,7 @@ from os import path as osp
 import argparse
 
 import torch
+from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset, ConcatDataset
 from diffusers import DDPMScheduler, DDIMScheduler, AutoencoderKL
@@ -378,6 +379,29 @@ def parse_args():
     return args
 
 
+class UnifiedModel(nn.Module):
+    def __init__(self, unet, refnet, poseguider, reference_encoder, reference_control_writer, reference_control_reader):
+        super().__init__()
+        self.unet = unet
+        self.refnet = refnet
+        self.reference_encoder = reference_encoder
+        self.poseguider = poseguider
+        self.reference_control_writer = reference_control_writer
+        self.reference_control_reader = reference_control_reader
+    
+    def forward(self, latents, cloth_latents, timesteps, pose_images, cloth_ref_images):
+        ref_timesteps = torch.zeros_like(timesteps)
+        pose_latents = self.poseguider(pose_images)
+        latents = latents + pose_latents
+        
+        encoder_hidden_states = self.reference_encoder(cloth_ref_images).unsqueeze(1)
+        self.refnet(cloth_latents, ref_timesteps, encoder_hidden_states)
+        self.reference_control_reader.update(self.reference_control_writer)
+        noise_pred = self.unet(latents, timesteps, encoder_hidden_states).sample
+        
+        return noise_pred
+
+
 def main():
     args = parse_args()
 
@@ -403,8 +427,8 @@ def main():
         set_seed(args.seed)
 
     # Load diffusion-related components
-    noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler')
-    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder='vae', use_safetensors=False, torch_dtype=torch.float16)
+    noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler', rescale_betas_zero_snr=True)
+    vae = AutoencoderKL.from_pretrained(args.vae_path, use_safetensors=True)
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
     refnet = ReferenceNet.from_pretrained(args.refnet_model, subfolder='unet', use_safetensors=False)
     poseguider = PoseGuider(noise_latent_channels=9)
@@ -414,7 +438,7 @@ def main():
 
     reference_control_writer = ReferenceNetAttention(refnet, mode='write')
     reference_control_reader = ReferenceNetAttention(unet, mode='read')
-
+    
     # init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
     # init_attn_processor(refnet, cross_attn_cls=SkipAttnProcessor)
     #from xformers.ops import memory_efficient_attention
@@ -446,7 +470,7 @@ def main():
     set_train(refnet, True)
     set_train(poseguider, True)
     set_train(unet, True)
-
+    
     # if args.train_self_attn_only:
     #     # Train only self-attention layers.
     #     # This logic assumes that the cross-attention layers was disabled.
@@ -475,7 +499,7 @@ def main():
             trainable_params += s
     accelerator.print('=====================')
     accelerator.print(f'Total: {trainable_params}')
-
+    
     # Enable TF32 for faster training on Ampere GPUs (and later)
     if args.allow_tf32:
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -485,11 +509,18 @@ def main():
     else:
         optimizer_class = torch.optim.AdamW
 
+    model = UnifiedModel(
+        unet=unet, refnet=refnet, poseguider=poseguider,
+        reference_encoder=image_encoder,
+        reference_control_writer=reference_control_writer,
+        reference_control_reader=reference_control_reader
+    )
+        
     # Define optimizer
     params_to_opt = itertools.chain(
-        unet.parameters(),
-        poseguider.parameters(),
-        refnet.parameters()
+        model.unet.parameters(),
+        model.poseguider.parameters(),
+        model.refnet.parameters()
     )
     optimizer = optimizer_class(
         params_to_opt,
@@ -581,8 +612,9 @@ def main():
             raise ValueError(f'No support for your dataset.')
 
     if args.use_subset:
-        # get only first `num_subset_samples` samples
-        train_dataset = Subset(train_dataset, [n for n in range(args.num_subset_samples)])
+        t = args.num_subset_samples // 2
+        sample_indexes = [i for i in range(t)] + [-i for i in range(1, t + 1)]
+        train_dataset = Subset(train_dataset, sample_indexes)
 
     train_dataloader = DataLoader(
         dataset=train_dataset,
@@ -625,7 +657,7 @@ def main():
     # * Device Placement
     # * Gradient Synchronization
     # * what else?
-    unet, refnet, image_encoder, poseguider, optimizer, train_dataloader, test_dataloader = accelerator.prepare(unet, refnet, image_encoder, poseguider, optimizer, train_dataloader, test_dataloader)
+    model, optimizer, train_dataloader, test_dataloader = accelerator.prepare(model, optimizer, train_dataloader, test_dataloader)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     # (actually I don't know why this could happen :|)
@@ -716,20 +748,23 @@ def main():
                 timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bs,), device=device) # DDIM Scheduler
                 timesteps = timesteps.long()
 
-                encoder_hidden_states = image_encoder(image_ref).unsqueeze(1)
-                
-                # Get self-attention features from reference net
-                # and inject it into denoising unet
-                ref_timesteps = torch.zeros_like(timesteps) # why zero out noise?
-                refnet(cloth_latents, ref_timesteps, encoder_hidden_states)
-                reference_control_reader.update(reference_control_writer)
-
-                # Denoising unet
                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
-                concat_latents = torch.cat([noisy_latents, masks, masked_image_latents], dim=1) # concatenate in channel dim
-                pose_latents = poseguider(batch['densepose'].to(dtype=weight_dtype))
-                unet_input = concat_latents + pose_latents
-                noise_pred = unet(unet_input, timesteps, encoder_hidden_states=encoder_hidden_states).sample # Denoising or diffusion backward process
+                concat_latents = torch.cat([noisy_latents, masks, masked_image_latents], dim=1)
+                noise_pred = model(concat_latents, cloth_latents, timesteps, batch['densepose'], image_ref)
+#                 encoder_hidden_states = image_encoder(image_ref).unsqueeze(1)
+
+#                 # Get self-attention features from reference net
+#                 # and inject it into denoising unet
+#                 ref_timesteps = torch.zeros_like(timesteps) # why zero out noise?
+#                 refnet(cloth_latents, ref_timesteps, encoder_hidden_states)
+#                 reference_control_reader.update(reference_control_writer)
+
+#                 # Denoising unet
+#                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
+#                 concat_latents = torch.cat([noisy_latents, masks, masked_image_latents], dim=1) # concatenate in channel dim
+#                 pose_latents = poseguider(batch['densepose'].to(dtype=weight_dtype))
+#                 unet_input = concat_latents + pose_latents
+#                 noise_pred = unet(unet_input, timesteps, encoder_hidden_states=encoder_hidden_states).sample # Denoising or diffusion backward process
 
                 if args.snr_gamma is None:
                     loss = F.mse_loss(noise_pred.float(), noise.float(), reduction='mean') # compute loss

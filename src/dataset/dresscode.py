@@ -26,8 +26,8 @@ class DressCodeDataset(Dataset):
             use_augmentation: bool = False,
             h: int = 1024, # height
             w: int = 768, # weight
-            use_clip: bool = True,
-            clip_model_id: str = 'openai/clip-vit-base-patch32',
+            use_CLIPVision: bool = True,
+            clip_model_id: str = 'openai/clip-vit-base-patch32', # huggingface model id
             use_dilated_relaxed_mask: bool = False,
             random_dilate_mask: bool = False
     ):
@@ -38,13 +38,14 @@ class DressCodeDataset(Dataset):
         self.w = self.width = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
         self.random_dilate_mask = random_dilate_mask
-        
-        if use_clip:
-            self.image_processor = CLIPImageProcessor.from_pretrained(clip_model_id)
+        self.use_CLIPVision = use_CLIPVision
 
         if self.use_augmentation:
             # flip
             self.flip = v2.RandomHorizontalFlip(p=1)
+        
+        if self.use_CLIPVision:
+            self.image_processor = CLIPImageProcessor(clip_model_id)
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
         self.transform = v2.Compose(
@@ -115,14 +116,10 @@ class DressCodeDataset(Dataset):
         clone_img = img.copy()
         img = self.transform(img)
 
-        # Cloth
-        c = Image.open(osp.join(dataroot, 'images', c_name))
-        c = self.image_processor(images=c, return_tensors='pt').pixel_values
-        c = c.squeeze(0)
-        
         # garment image
         c_raw = Image.open(osp.join(dataroot, 'images', c_name))
-        c_raw = c_raw.resize((self.w, self.h))
+        c = c_raw = c_raw.resize((self.w, self.h))
+        c = self.image_processor(images=c, return_tensors='pt').pixel_values.squeeze(0) # (C, H, W) = (3, 244, 244)
         c_raw = self.transform(c_raw)
 
         # mask image
@@ -164,19 +161,19 @@ class DressCodeDataset(Dataset):
             if random.random() > 0.5:
                 img = self.flip(img)
                 c_raw = self.flip(c_raw)
+                c = self.flip(c)
                 mask = self.flip(mask)
-                # masked_img = self.flip(masked_img)
                 dp = self.flip(dp)
             if random.random() > 0.5:
                 hue_value = random.uniform(-0.5, 0.5)
                 img = adjust_hue(img, hue_value)
-                # masked_img = adjust_hue(masked_img, hue_value)
                 c_raw = adjust_hue(c_raw, hue_value)
+                c = adjust_hue(c, hue_value)
             if random.random() > 0.5:
                 contrast_factor = random.uniform(0.8, 1.2)
                 img = adjust_contrast(img, contrast_factor)
-                # masked_img = adjust_contrast(masked_img, contrast_factor)
                 c_raw = adjust_contrast(c_raw, contrast_factor)
+                c = adjust_contrast(c, contrast_factor)
             # if random.random() > 0.5:
             #     shift_x = random.uniform(-0.2, 0.2)
             #     shift_y = random.uniform(-0.2, 0.2)
