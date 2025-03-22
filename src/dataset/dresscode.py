@@ -119,7 +119,7 @@ class DressCodeDataset(Dataset):
         # garment image
         c_raw = Image.open(osp.join(dataroot, 'images', c_name))
         c = c_raw = c_raw.resize((self.w, self.h))
-        c = self.image_processor(images=c, return_tensors='pt').pixel_values.squeeze(0) # (C, H, W) = (3, 244, 244)
+        c = self.image_processor(images=c, return_tensors='pt').pixel_values
         c_raw = self.transform(c_raw)
 
         # mask image
@@ -189,6 +189,8 @@ class DressCodeDataset(Dataset):
             #     dp = affine(dp, angle=0, translate=(0, 0), scale=scale, shear=0)
         
         masked_img = torch.mul(1 - mask, img)
+        
+        drop_image_embed = 1 if random.random() < 0.1 else 0
 
         item.update({
             'im_name': im_name,
@@ -199,7 +201,8 @@ class DressCodeDataset(Dataset):
             'mask': mask,
             'densepose': dp,
             'cloth_raw': c_raw,
-            'cloth_ref': c
+            'cloth_ref': c,
+            'drop_image_embed': drop_image_embed
         })
 
         return item

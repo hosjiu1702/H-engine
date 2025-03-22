@@ -106,7 +106,7 @@ class VITONHDDataset(Dataset):
         # Cloth
         c_raw = Image.open(self.c_paths[index])
         c = c_raw = c_raw.resize((self.width, self.height))
-        c = self.image_processor(images=c, return_tensors='pt').pixel_values.squeeze(0)
+        c = self.image_processor(images=c, return_tensors='pt').pixel_values
         c_raw = self.transform(c_raw)
 
         # Densepose
@@ -168,7 +168,9 @@ class VITONHDDataset(Dataset):
             #     dp = affine(dp, angle=0, translate=(0, 0), scale=scale, shear=0)
 
         masked_img = torch.mul(1 - mask, img)
-            
+
+        drop_image_embed = 1 if random.random() < 0.1 else 0 # drop rate 10%
+
         item.update({
             'im_name': img_name,
             'c_name': '',
@@ -179,6 +181,7 @@ class VITONHDDataset(Dataset):
             'densepose': dp,
             'cloth_raw': c_raw,
             'cloth_ref': c,
+            'drop_image_embed': drop_image_embed
             # 'original_image_path': str(self.im_paths[index]),
             # 'original_mask': self.totensor(origin_m),
             # 'original_mask_path': str(self.m_paths[index]),
