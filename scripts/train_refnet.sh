@@ -2,21 +2,23 @@ export TORCH_DISTRIBUTED_DEBUG=INFO
 export MIXED_PRECISION_TRAINING='bf16'
 export NUM_GPUS=1
 export NUM_NODES=1
-export MAIN_PROCESS_PORT=29507
+export MAIN_PROCESS_PORT=29501
 export HUGGINGFACE_MODEL_ID=stable-diffusion-v1-5/stable-diffusion-inpainting
 export REFERENCE_NET=stable-diffusion-v1-5/stable-diffusion-v1-5
-export REFERENCE_ENCODER_MODEL_ID=openai/clip-vit-base-patch32
+export REFERENCE_ENCODER_MODEL_ID=patrickjohncyh/fashion-clip
+export VAE_MODEL=stabilityai/sd-vae-ft-mse
 export SINGLE_DATAPATH=/hosjiu/data/dresscode/DressCode
 export VITONHD_DATAPATH=datasets/vitonhd
-export DRESSCODE_DATAPATH=/hosjiu/data/dresscode/DressCode
+export DRESSCODE_DATAPATH=datasets/dresscode
 export OUTPUT_DIR=results/Navier-1[alpha]
 export PROJECT_NAME='TEST-VTO'
-export WANDB_NAME_RUN='refnet'
+export WANDB_NAME_RUN='test(refnet)'
+export CFG=1.5
 export SNR_GAMMA=5
 export WIDTH=384
 export HEIGHT=512
-export BATCH_SIZE=2
-export SEED=2050
+export BATCH_SIZE=8
+export SEED=2080
 export ENABLE_TRACKER=false
 
 python -u -m accelerate.commands.launch --main_process_port=$MAIN_PROCESS_PORT --mixed_precision=$MIXED_PRECISION_TRAINING --num_processes=$NUM_GPUS --num_machines=$NUM_NODES --dynamo_backend='no' \
@@ -24,11 +26,13 @@ train_refnet.py \
 --pretrained_model_name_or_path=$HUGGINGFACE_MODEL_ID \
 --refnet_model=$REFERENCE_NET \
 --image_encoder_path=$REFERENCE_ENCODER_MODEL_ID \
+--vae_path=$VAE_MODEL \
 --merge_hd_dc \
 --use_subset \
---num_subset_samples=1000 \
+--num_subset_samples=10000 \
 --vitonhd_datapath=$VITONHD_DATAPATH \
 --dresscode_datapath=$DRESSCODE_DATAPATH \
+--cfg=$CFG \
 --width=$WIDTH \
 --height=$HEIGHT \
 --seed=$SEED \
@@ -41,7 +45,7 @@ train_refnet.py \
 --train_batch_size=$BATCH_SIZE \
 --gradient_accumulation_steps=1 \
 --mixed_precision=$MIXED_PRECISION_TRAINING \
---num_workers=16 \
+--num_workers=12 \
 --num_train_epochs=1000 \
 --max_train_steps=300000 \
 --checkpointing_steps=15000 \
