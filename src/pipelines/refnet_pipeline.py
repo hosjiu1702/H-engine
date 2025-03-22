@@ -761,7 +761,11 @@ class TryOnPipeline(
         if isinstance(image, torch.Tensor):
             batch_size = image.shape[0]
 
-        device = self._execution_device
+        try:
+            device = self._execution_device
+        except AttributeError:
+            logger.info('_execution_device() does not work. Fallback.')
+            device = torch.device(0)
 
         # 4. set timesteps
         timesteps, num_inference_steps = retrieve_timesteps(
@@ -871,6 +875,13 @@ class TryOnPipeline(
                 generator,
             )
 
+        latents = randn_tensor(
+            shape=masked_image_latents.shape,
+            generator=generator,
+            device=device,
+            dtype=self.weight_dtype)
+        latents = latents * self.scheduler.init_noise_sigma            
+
         densepose_image = self.image_processor.preprocess(densepose_image, height, width)
         densepose_latents = self.vae.encode(densepose_image).latent_dist.sample(generator=generator)
         densepose_latents = densepose_latents * self.vae.config.scaling_factor # this factor is an interested thing to understand :)
@@ -880,27 +891,21 @@ class TryOnPipeline(
         cloth_latents = self.vae.encode(cloth_image).latent_dist.sample()
         cloth_latents = cloth_latents * self.vae.config.scaling_factor
         cloth_latents.to(device=device, dtype=self.weight_dtype)
-
-        latents = randn_tensor(
-            shape=masked_image_latents.shape,
-            generator=generator,
-            device=device,
-            dtype=self.weight_dtype)
-        latents = latents * self.scheduler.init_noise_sigma
+        
+        if self.do_classifier_free_guidance:
+            null_cloth_latents = torch.zeros_like(cloth_latents)
+            cloth_latents = torch.cat([null_cloth_latents, cloth_latents], dim=0)
 
         if self.do_classifier_free_guidance:
-            # densepose_latents_concat = torch.cat([densepose_latents_concat] * 2, dim=0)
-            densepose_latents_concat = torch.cat([
-                torch.cat([densepose_latents, torch.zeros_like(cloth_latents)], dim=concat_dim),
-                densepose_latents_concat
-            ])
-            mask_concat = torch.cat([mask_concat] * 2, dim=0)
-            # masked_image_latents_concat = torch.cat([masked_image_latents_concat] * 2, dim=0)
-            masked_image_latents_concat = torch.cat([
-                torch.cat([masked_image_latents, torch.zeros_like(cloth_latents)], dim=concat_dim), # uncond
-                masked_image_latents_concat # cond
-            ])
+            mask = torch.cat([mask] * 2, dim=0)
+            masked_image_latents = torch.cat([masked_image_latents] * 2, dim=0)
 
+        # clip-based embeddings (for cross-attention layers)
+        clip_image_embeds = self.reference_encoder(cloth_ref_image).to(device=device, dtype=self.weight_dtype).unsqueeze(1)
+        if self.do_classifier_free_guidance:
+            null_image_embeds = torch.zeros_like(clip_image_embeds)
+            clip_image_embeds = torch.cat([null_image_embeds, clip_image_embeds], dim=0)
+            
         # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
@@ -912,24 +917,25 @@ class TryOnPipeline(
                 if self.interrupt:
                     continue
 
-                encoder_hidden_states = self.reference_encoder(cloth_ref_image).to(device=device, dtype=self.weight_dtype).unsqueeze(1)
-                self.refnet(cloth_latents, torch.zeros_like(t), encoder_hidden_states)
+                self.refnet(cloth_latents, torch.zeros_like(t), encoder_hidden_states=clip_image_embeds)
                 self.reference_control_reader.update(self.reference_control_writer)
 
-                # pose embeddings
+                # create pose embeddings
                 pose_latents = self.poseguider(densepose_image).to(device=device, dtype=self.weight_dtype)
+                
+                # pose injection
+                latents = latents + pose_latents
                 
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
                 latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
-                latent_model_input = latent_model_input + pose_latents # pose injection
 
                 # predict the noise residual
                 noise_pred = self.unet(
                     latent_model_input,
                     t,
-                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_hidden_states=clip_image_embeds,
                     cross_attention_kwargs=self.cross_attention_kwargs,
                     return_dict=False,
                 )[0]
@@ -939,8 +945,8 @@ class TryOnPipeline(
 
                 # perform guidance
                 if self.do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
+                    noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
+                    noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_cond - noise_pred_uncond)
 
                 # compute the previous noisy sample x_t -> x_t-1
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
