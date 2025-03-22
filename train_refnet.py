@@ -372,7 +372,13 @@ def parse_args():
         '--dc',
         action='store_true',
         help='Single DRESSCODE training'
-    )    
+    )
+    parser.add_argument(
+        '--cfg',
+        default=1.,
+        type=float,
+    )
+
 
     args = parser.parse_args()
 
@@ -389,19 +395,40 @@ class UnifiedModel(nn.Module):
         self.reference_control_writer = reference_control_writer
         self.reference_control_reader = reference_control_reader
     
-    def forward(self, latents, cloth_latents, timesteps, pose_images, cloth_ref_images):
+    def forward(self, noisy_latents, masks, masked_image_latents, cloth_latents, timesteps, pose_images, cloth_ref_images):
         ref_timesteps = torch.zeros_like(timesteps)
         pose_latents = self.poseguider(pose_images)
-        latents = latents + pose_latents
-        
+        noisy_latents = noisy_latents + pose_latents
+        latent_model_input = torch.cat([noisy_latents, masks, masked_image_latents], dim=1)
+
         encoder_hidden_states = self.reference_encoder(cloth_ref_images).unsqueeze(1)
         self.refnet(cloth_latents, ref_timesteps, encoder_hidden_states)
         self.reference_control_reader.update(self.reference_control_writer)
-        noise_pred = self.unet(latents, timesteps, encoder_hidden_states).sample
+        noise_pred = self.unet(latent_model_input, timesteps, encoder_hidden_states).sample
         
         return noise_pred
 
 
+def collate_fn(data):
+    images = torch.stack([sample['image'] for sample in data])
+    masked_images = torch.stack([sample['masked_image'] for sample in data])
+    masks = torch.stack([sample['mask'] for sample in data])
+    denseposes = torch.stack([sample['densepose'] for sample in data])
+    cloth_raw = torch.stack([sample['cloth_raw'] for sample in data])
+    cloth_ref = torch.cat([sample['cloth_ref'] for sample in data], dim=0)
+    drop_image_embeds = torch.Tensor([sample['drop_image_embed'] for sample in data])
+    
+    return {
+        'image': images,
+        'masked_image': masked_images,
+        'mask': masks,
+        'densepose': denseposes,
+        'cloth_raw': cloth_raw,
+        'cloth_ref': cloth_ref,
+        'drop_image_embed': drop_image_embeds
+    }
+    
+    
 def main():
     args = parse_args()
 
@@ -431,7 +458,7 @@ def main():
     vae = AutoencoderKL.from_pretrained(args.vae_path, use_safetensors=True)
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
     refnet = ReferenceNet.from_pretrained(args.refnet_model, subfolder='unet', use_safetensors=False)
-    poseguider = PoseGuider(noise_latent_channels=9)
+    poseguider = PoseGuider(noise_latent_channels=4)
     image_encoder = ReferenceEncoder(model_path=args.image_encoder_path)
     
     modules = [vae, unet, refnet, poseguider, image_encoder]
@@ -618,6 +645,7 @@ def main():
 
     train_dataloader = DataLoader(
         dataset=train_dataset,
+        collate_fn=collate_fn,
         batch_size=args.train_batch_size,
         shuffle=True,
         num_workers=args.num_workers,
@@ -731,8 +759,16 @@ def main():
 
                 masks = batch['mask'].to(dtype=weight_dtype)
                 masks = F.interpolate(masks, size=(args.height//8, args.width//8))
-                
-                image_ref = batch['cloth_ref']
+
+                # classifier-free guidance support
+                image_ref = []
+                for img_ref, drop in zip(batch['cloth_ref'], batch['drop_image_embed']):
+                    if drop == 1:
+                        image_ref.append(torch.zeros_like(img_ref)) # shape = [3, 224, 224]
+                    else:
+                        image_ref.append(img_ref)
+                image_ref = torch.stack(image_ref) # shape = [bs, 3, 224, 224]
+                assert image_ref.shape[0] == args.train_batch_size
 
                 # Move to device (e.g, GPUs)
                 image_latents.to(device, dtype=weight_dtype)
@@ -749,8 +785,7 @@ def main():
                 timesteps = timesteps.long()
 
                 noisy_latents = noise_scheduler.add_noise(image_latents, noise, timesteps)
-                concat_latents = torch.cat([noisy_latents, masks, masked_image_latents], dim=1)
-                noise_pred = model(concat_latents, cloth_latents, timesteps, batch['densepose'], image_ref)
+                noise_pred = model(noisy_latents, masks, masked_image_latents, cloth_latents, timesteps, batch['densepose'], image_ref)
 #                 encoder_hidden_states = image_encoder(image_ref).unsqueeze(1)
 
 #                 # Get self-attention features from reference net
@@ -907,10 +942,10 @@ def main():
                                         mask_image=batch['mask'].to(device.type, dtype=weight_dtype),
                                         densepose_image=batch['densepose'].to(device.type, dtype=weight_dtype),
                                         cloth_image=batch['cloth_raw'].to(device.type, dtype=weight_dtype),
-                                        cloth_ref_image=batch['cloth_ref'].to(device.type, dtype=weight_dtype),
+                                        cloth_ref_image=batch['cloth_ref'].squeeze(1).to(device.type, dtype=weight_dtype),
                                         height=args.height,
                                         width=args.width,
-                                        guidance_scale=1.,
+                                        guidance_scale=args.cfg,
                                         num_inference_steps=30
                                     ).images # pil
                                     img_path = os.path.join(args.output_dir, 'images')
