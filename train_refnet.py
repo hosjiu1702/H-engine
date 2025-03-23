@@ -267,6 +267,11 @@ def parse_args():
         help='Batch size (per device, in the distributed training) for the training dataloader.'
     )
     parser.add_argument(
+        '--test_batch_size',
+        type=int,
+        default=8,
+    )
+    parser.add_argument(
         '--num_workers',
         type=int,
         default=8,
@@ -454,14 +459,14 @@ def main():
         set_seed(args.seed)
 
     # Load diffusion-related components
-    noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler', rescale_betas_zero_snr=True)
+    noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder='scheduler', rescale_betas_zero_snr=False)
     vae = AutoencoderKL.from_pretrained(args.vae_path, use_safetensors=True)
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
     refnet = ReferenceNet.from_pretrained(args.refnet_model, subfolder='unet', use_safetensors=False)
     poseguider = PoseGuider(noise_latent_channels=4)
-    image_encoder = ReferenceEncoder(model_path=args.image_encoder_path)
+    reference_encoder = ReferenceEncoder(model_path=args.image_encoder_path)
     
-    modules = [vae, unet, refnet, poseguider, image_encoder]
+    modules = [vae, unet, refnet, poseguider, reference_encoder]
 
     reference_control_writer = ReferenceNetAttention(refnet, mode='write')
     reference_control_reader = ReferenceNetAttention(unet, mode='read')
@@ -493,7 +498,7 @@ def main():
     #         unet.config.in_channels = new_in_channels
 
     set_train(vae, False)
-    set_train(image_encoder, False)
+    set_train(reference_encoder, False)
     set_train(refnet, True)
     set_train(poseguider, True)
     set_train(unet, True)
@@ -538,7 +543,7 @@ def main():
 
     model = UnifiedModel(
         unet=unet, refnet=refnet, poseguider=poseguider,
-        reference_encoder=image_encoder,
+        reference_encoder=reference_encoder,
         reference_control_writer=reference_control_writer,
         reference_control_reader=reference_control_reader
     )
@@ -547,7 +552,7 @@ def main():
     params_to_opt = itertools.chain(
         model.unet.parameters(),
         model.poseguider.parameters(),
-        model.refnet.parameters()
+        model.refnet.parameters(),
     )
     optimizer = optimizer_class(
         params_to_opt,
@@ -655,8 +660,8 @@ def main():
 
     test_dataloader = DataLoader(
         dataset=test_dataset,
-        batch_size=args.train_batch_size,
-        shuffle=True,
+        batch_size=args.test_batch_size,
+        shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
     )
@@ -829,7 +834,7 @@ def main():
                 # very hard to understand how everything is going on
                 accelerator.backward(loss)
                 # if accelerator.sync_gradients:
-                #     accelerator.clip_grad_norm_(unet.parameters(), 1.0)
+                #     accelerator.clip_grad_norm_(params_to_opt, 1.0)
                 optimizer.step()
                 optimizer.zero_grad()
 
@@ -925,7 +930,7 @@ def main():
                                 unet=unwrapped_unet,
                                 refnet=unwrapped_refnet,
                                 poseguider=unwrapped_poseguider,
-                                reference_encoder=image_encoder,
+                                reference_encoder=reference_encoder,
                                 reference_control_writer=reference_control_writer,
                                 reference_control_reader=reference_control_reader,
                                 vae=vae,
@@ -946,7 +951,7 @@ def main():
                                         height=args.height,
                                         width=args.width,
                                         guidance_scale=args.cfg,
-                                        num_inference_steps=30
+                                        num_inference_steps=35
                                     ).images # pil
                                     img_path = os.path.join(args.output_dir, 'images')
                                     os.makedirs(img_path, exist_ok=True)

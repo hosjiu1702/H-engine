@@ -1,6 +1,6 @@
 export TORCH_DISTRIBUTED_DEBUG=INFO
 export MIXED_PRECISION_TRAINING='bf16'
-export NUM_GPUS=1
+export NUM_GPUS=16
 export NUM_NODES=1
 export MAIN_PROCESS_PORT=29501
 export HUGGINGFACE_MODEL_ID=stable-diffusion-v1-5/stable-diffusion-inpainting
@@ -10,16 +10,17 @@ export VAE_MODEL=stabilityai/sd-vae-ft-mse
 export SINGLE_DATAPATH=/hosjiu/data/dresscode/DressCode
 export VITONHD_DATAPATH=datasets/vitonhd
 export DRESSCODE_DATAPATH=datasets/dresscode
-export OUTPUT_DIR=results/Navier-1[alpha]
+export OUTPUT_DIR=results/refnet_22_03
 export PROJECT_NAME='TEST-VTO'
-export WANDB_NAME_RUN='test(refnet)'
+export WANDB_NAME_RUN='test'
 export CFG=1.5
 export SNR_GAMMA=5
 export WIDTH=384
 export HEIGHT=512
-export BATCH_SIZE=8
-export SEED=2080
-export ENABLE_TRACKER=false
+export TRAIN_BATCH_SIZE=8
+export TEST_BATCH_SIZE=8
+export SEED=2089
+export ENABLE_TRACKER=true
 
 python -u -m accelerate.commands.launch --main_process_port=$MAIN_PROCESS_PORT --mixed_precision=$MIXED_PRECISION_TRAINING --num_processes=$NUM_GPUS --num_machines=$NUM_NODES --dynamo_backend='no' \
 train_refnet.py \
@@ -29,7 +30,7 @@ train_refnet.py \
 --vae_path=$VAE_MODEL \
 --merge_hd_dc \
 --use_subset \
---num_subset_samples=10000 \
+--num_subset_samples=1000 \
 --vitonhd_datapath=$VITONHD_DATAPATH \
 --dresscode_datapath=$DRESSCODE_DATAPATH \
 --cfg=$CFG \
@@ -42,15 +43,16 @@ train_refnet.py \
 --allow_tf32 \
 --train_with_8bit \
 --output_dir=$OUTPUT_DIR \
---train_batch_size=$BATCH_SIZE \
+--train_batch_size=$TRAIN_BATCH_SIZE \
+--test_batch_size=$TEST_BATCH_SIZE \
 --gradient_accumulation_steps=1 \
 --mixed_precision=$MIXED_PRECISION_TRAINING \
 --num_workers=12 \
 --num_train_epochs=1000 \
 --max_train_steps=300000 \
---checkpointing_steps=15000 \
+--checkpointing_steps=30000 \
 --eval_steps=100000000 \
---validation_steps=2 \
+--validation_steps=500 \
 --lr=1e-5 \
 --use_tracker=$ENABLE_TRACKER \
 --project_name=$PROJECT_NAME \
