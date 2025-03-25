@@ -901,7 +901,7 @@ class TryOnPipeline(
             masked_image_latents = torch.cat([masked_image_latents] * 2, dim=0)
 
         # clip-based embeddings (for cross-attention layers)
-        clip_image_embeds = self.reference_encoder(cloth_ref_image).to(device=device, dtype=self.weight_dtype).unsqueeze(1)
+        clip_image_embeds = self.reference_encoder(cloth_ref_image).to(device=device, dtype=self.weight_dtype)
         if self.do_classifier_free_guidance:
             null_image_embeds = torch.zeros_like(clip_image_embeds)
             clip_image_embeds = torch.cat([null_image_embeds, clip_image_embeds], dim=0)

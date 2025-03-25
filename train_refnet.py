@@ -190,29 +190,6 @@ def parse_args():
         default=1996,
         help='A seed for reproducible training'
     )
-    ### IP-Adapter hyperparams ###
-    parser.add_argument(
-        '--num_tokens',
-        type=int,
-        default=16,
-        help='Number of tokens (query tokens) which is used as input of the perceiver resampler of IP-Adapter.'
-    )
-    parser.add_argument(
-        '--depth',
-        type=int,
-        default=4,
-    )
-    parser.add_argument(
-        '--head_dim',
-        type=int,
-        default=64,
-    )
-    parser.add_argument(
-        '--head_num',
-        type=int,
-        default=12,
-    )
-    ### End ###
     parser.add_argument(
         '--allow_tf32',
         action='store_true',
@@ -354,6 +331,10 @@ def parse_args():
         help='Train only self-attention layers in UNet.'
     )
     parser.add_argument(
+        '--train_refnet_self_attn_only',
+        action='store_true',
+    )
+    parser.add_argument(
         '--dataset_augmentation',
         action='store_true',
         help='Apply some augmentation transformation aiming to achieve better generalization in real-world scenarios. Checkout section Training & Inference Details in Supplementary Material from StableVITON (https://arxiv.org/pdf/2312.01725)'
@@ -383,8 +364,24 @@ def parse_args():
         default=1.,
         type=float,
     )
-
-
+    parser.add_argument(
+        '--enable_resampler',
+        action='store_true',
+        help='Add a resampler to reference encoder as mentioned in IP-Adapter.'
+    )
+    parser.add_argument(
+        '--enable_mlp',
+        action='store_true',
+    )
+    parser.add_argument(
+        '--train_resampler',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--train_mlp',
+        action='store_true'
+    )
+    
     args = parser.parse_args()
 
     return args
@@ -406,7 +403,7 @@ class UnifiedModel(nn.Module):
         noisy_latents = noisy_latents + pose_latents
         latent_model_input = torch.cat([noisy_latents, masks, masked_image_latents], dim=1)
 
-        encoder_hidden_states = self.reference_encoder(cloth_ref_images).unsqueeze(1)
+        encoder_hidden_states = self.reference_encoder(cloth_ref_images)
         self.refnet(cloth_latents, ref_timesteps, encoder_hidden_states)
         self.reference_control_reader.update(self.reference_control_writer)
         noise_pred = self.unet(latent_model_input, timesteps, encoder_hidden_states).sample
@@ -464,8 +461,8 @@ def main():
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder='unet', use_safetensors=False)
     refnet = ReferenceNet.from_pretrained(args.refnet_model, subfolder='unet', use_safetensors=False)
     poseguider = PoseGuider(noise_latent_channels=4)
-    reference_encoder = ReferenceEncoder(model_path=args.image_encoder_path)
-    
+    reference_encoder = ReferenceEncoder(args.image_encoder_path, enable_resampler=args.enable_resampler, enable_mlp=args.enable_mlp, unet=unet)
+
     modules = [vae, unet, refnet, poseguider, reference_encoder]
 
     reference_control_writer = ReferenceNetAttention(refnet, mode='write')
@@ -503,14 +500,27 @@ def main():
     set_train(poseguider, True)
     set_train(unet, True)
     
-    # if args.train_self_attn_only:
-    #     # Train only self-attention layers.
-    #     # This logic assumes that the cross-attention layers was disabled.
-    #     set_train(unet, False)
-    #     for name, module in unet.named_modules():
-    #         if name.endswith('.attn1'):
-    #             for params in module.parameters():
-    #                 params.requires_grad = True
+    if args.train_self_attn_only:
+        set_train(unet, False)
+        for name, module in unet.named_modules():
+            if name.endswith('.attn1'):
+                for params in module.parameters():
+                    params.requires_grad = True
+
+    if args.train_refnet_self_attn_only:
+        set_train(refnet, False)
+        for name, module in refnet.named_modules():
+            if name.endswith('.attn1'):
+                for params in module.parameters():
+                    params.requires_grad = True
+    
+    if args.enable_resampler and args.train_resampler:
+        set_train(reference_encoder, False)
+        set_train(reference_encoder.image_proj_model, True)
+
+    if args.enable_mlp and args.train_mlp:
+        set_train(reference_encoder, False)
+        set_train(reference_encoder.mlp, True)
     # else:
     #     # train full unet
     #     set_train(unet, True) # train full unet
@@ -553,6 +563,7 @@ def main():
         model.unet.parameters(),
         model.poseguider.parameters(),
         model.refnet.parameters(),
+        model.reference_encoder.mlp.parameters()
     )
     optimizer = optimizer_class(
         params_to_opt,
@@ -744,6 +755,7 @@ def main():
         unet.train()
         refnet.train()
         poseguider.train()
+        reference_encoder.mlp.train()
 
         train_loss = 0.
         for step, batch in enumerate(train_dataloader):
@@ -926,11 +938,12 @@ def main():
                             unwrapped_unet = accelerator.unwrap_model(unet)
                             unwrapped_refnet = accelerator.unwrap_model(refnet)
                             unwrapped_poseguider = accelerator.unwrap_model(poseguider)
+                            unwrapped_encoder = accelerator.unwrap_model(reference_encoder)
                             pipe = TryOnPipeline(
                                 unet=unwrapped_unet,
                                 refnet=unwrapped_refnet,
                                 poseguider=unwrapped_poseguider,
-                                reference_encoder=reference_encoder,
+                                reference_encoder=unwrapped_encoder,
                                 reference_control_writer=reference_control_writer,
                                 reference_control_reader=reference_control_reader,
                                 vae=vae,
@@ -978,6 +991,7 @@ def main():
                             del unwrapped_unet
                             del unwrapped_refnet
                             del unwrapped_poseguider
+                            del unwrapped_encoder
                             del pipe
                             torch.cuda.empty_cache()
                 logs = {'step_loss': loss.detach().item()}
