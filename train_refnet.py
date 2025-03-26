@@ -381,6 +381,10 @@ def parse_args():
         '--train_mlp',
         action='store_true'
     )
+    parser.add_argument(
+        '--train_midup_self_attn',
+        action='store_true'
+    )
     
     args = parser.parse_args()
 
@@ -465,13 +469,13 @@ def main():
 
     modules = [vae, unet, refnet, poseguider, reference_encoder]
 
-    reference_control_writer = ReferenceNetAttention(refnet, mode='write')
-    reference_control_reader = ReferenceNetAttention(unet, mode='read')
+    reference_control_writer = ReferenceNetAttention(refnet, mode='write', fusion_blocks='full')
+    reference_control_reader = ReferenceNetAttention(unet, mode='read', fusion_blocks='full')
     
     # init_attn_processor(unet, cross_attn_cls=SkipAttnProcessor) # skip cross-attention layer
     # init_attn_processor(refnet, cross_attn_cls=SkipAttnProcessor)
-    #from xformers.ops import memory_efficient_attention
-    #unet.set_attn_processor(memory_efficient_attention)
+    from xformers.ops import MemoryEfficientAttentionFlashAttentionOp
+    unet.enable_xformers_memory_efficient_attention(attention_op=MemoryEfficientAttentionFlashAttentionOp)
 
     if unet.conv_in.in_channels == 4:
         raise RuntimeError('This script supports inpainting UNet only.')
@@ -504,6 +508,13 @@ def main():
         set_train(unet, False)
         for name, module in unet.named_modules():
             if name.endswith('.attn1'):
+                for params in module.parameters():
+                    params.requires_grad = True
+
+    if args.train_midup_self_attn:
+        set_train(unet, False)
+        for name, module in unet.named_modules():
+            if name.endswith('.attn1') and not name.startswith('down_blocks'):
                 for params in module.parameters():
                     params.requires_grad = True
 

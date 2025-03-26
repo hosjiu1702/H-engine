@@ -220,7 +220,7 @@ class ReferenceNetAttention():
 
         if self.reference_attn:
             if self.fusion_blocks == "midup":
-                attn_modules = [module for module in (torch_dfs(self.unet.mid_block)+torch_dfs(self.unet.up_blocks)) if isinstance(module, BasicTransformerBlock) or isinstance(module, _BasicTransformerBlock)]
+                attn_modules = [module for module in (torch_dfs(self.unet.mid_block)+torch_dfs(self.unet.up_blocks)) if isinstance(module, BasicTransformerBlock)]
             elif self.fusion_blocks == "full":
                 attn_modules = [module for module in torch_dfs(self.unet) if isinstance(module, BasicTransformerBlock)]            
             attn_modules = sorted(attn_modules, key=lambda x: -x.norm1.normalized_shape[0])

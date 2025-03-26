@@ -2,24 +2,23 @@ export TORCH_DISTRIBUTED_DEBUG=INFO
 export MIXED_PRECISION_TRAINING='bf16'
 export NUM_GPUS=8
 export NUM_NODES=1
-export MAIN_PROCESS_PORT=29504
+export MAIN_PROCESS_PORT=29506
 export HUGGINGFACE_MODEL_ID=stable-diffusion-v1-5/stable-diffusion-inpainting
 export REFERENCE_NET=stable-diffusion-v1-5/stable-diffusion-v1-5
 export REFERENCE_ENCODER_MODEL_ID=patrickjohncyh/fashion-clip
 export VAE_MODEL=stabilityai/sd-vae-ft-mse
-export SINGLE_DATAPATH=/hosjiu/data/dresscode/DressCode
 export VITONHD_DATAPATH=datasets/vitonhd
 export DRESSCODE_DATAPATH=datasets/dresscode
-export OUTPUT_DIR=results/refnet_22_03
+export OUTPUT_DIR=results/refnet_2503_dc
 export PROJECT_NAME='TEST-VTO'
-export WANDB_NAME_RUN='MainNet(Self-Attn)_RefNet(Self-Attn)_MLP'
+export WANDB_NAME_RUN='fusion_block=full__self_attn=midup'
 export CFG=1.5
 export SNR_GAMMA=5
 export WIDTH=384
 export HEIGHT=512
 export TRAIN_BATCH_SIZE=8
 export TEST_BATCH_SIZE=8
-export SEED=2104
+export SEED=2114
 export ENABLE_TRACKER=true
 
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -u -m accelerate.commands.launch --main_process_port=$MAIN_PROCESS_PORT --mixed_precision=$MIXED_PRECISION_TRAINING --num_processes=$NUM_GPUS --num_machines=$NUM_NODES --dynamo_backend='no' \
@@ -31,6 +30,7 @@ train_refnet.py \
 --merge_hd_dc \
 --use_subset \
 --num_subset_samples=500 \
+--data_dir=$DRESSCODE_DATAPATH \
 --vitonhd_datapath=$VITONHD_DATAPATH \
 --dresscode_datapath=$DRESSCODE_DATAPATH \
 --cfg=$CFG \
@@ -41,8 +41,7 @@ train_refnet.py \
 --use_dilated_mask \
 --use_densepose \
 --allow_tf32 \
---train_self_attn_only \
---train_refnet_self_attn_only \
+--train_midup_self_attn \
 --enable_mlp \
 --train_mlp \
 --train_with_8bit \
@@ -51,7 +50,7 @@ train_refnet.py \
 --test_batch_size=$TEST_BATCH_SIZE \
 --gradient_accumulation_steps=1 \
 --mixed_precision=$MIXED_PRECISION_TRAINING \
---num_workers=12 \
+--num_workers=32 \
 --num_train_epochs=1000 \
 --max_train_steps=300000 \
 --checkpointing_steps=30000 \
