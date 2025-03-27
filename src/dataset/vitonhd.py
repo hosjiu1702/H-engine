@@ -32,6 +32,7 @@ class VITONHDDataset(Dataset):
             height: int = 1024,
             width: int = 768,
             use_CLIPVision: bool = True,
+            clip_model_id: str = 'openai/clip-vit-base-patch32', # huggingface model id
             use_dilated_relaxed_mask: bool = False,
     ):
         super(VITONHDDataset, self).__init__()
@@ -52,7 +53,7 @@ class VITONHDDataset(Dataset):
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
 
         if use_CLIPVision:
-            self.image_processor = CLIPImageProcessor()
+            self.image_processor = CLIPImageProcessor(clip_model_id)
 
         mode = 'train' if self.use_trainset else 'test'
         datapath = os.path.join(data_rootpath, mode)
@@ -103,13 +104,9 @@ class VITONHDDataset(Dataset):
         img = self.transform(img)
 
         # Cloth
-        c = Image.open(self.c_paths[index])
-        c = self.image_processor(images=c, return_tensors='pt').pixel_values
-        c = c.squeeze(0)
-
-        # Cloth (no CLIP preprocessing)
         c_raw = Image.open(self.c_paths[index])
-        c_raw = c_raw.resize((self.width, self.height))
+        c = c_raw = c_raw.resize((self.width, self.height))
+        c = self.image_processor(images=c, return_tensors='pt').pixel_values
         c_raw = self.transform(c_raw)
 
         # Densepose
@@ -126,46 +123,53 @@ class VITONHDDataset(Dataset):
         mask_np[mask_np > 127] = 255
         mask_np[mask_np <= 127] = 0
         mask = Image.fromarray(mask_np)
-        
-        mask = random_dilate_mask(mask) if self.random_dilate_mask else mask
+
+        if self.random_dilate_mask:
+            if random.random() > 0.5:
+                mask = random_dilate_mask(mask)
+
         mask = self.totensor(mask.convert('L'))
         mask[mask>0.5] = 1.
         mask[mask<0.5] = 0.
 
         # Masked image (agnostic image)
-        masked_img = mask2agn(mask, origin_img)
-        masked_img = self.transform(masked_img)
+        # masked_img = mask2agn(mask, origin_img)
+        # masked_img = self.transform(masked_img)
 
         if self.use_augmentation:
             if random.random() > 0.5:
                 img = self.flip(img)
                 c_raw = self.flip(c_raw)
+                c = self.flip(c)
                 mask = self.flip(mask)
-                masked_img = self.flip(masked_img)
                 dp = self.flip(dp)
             if random.random() > 0.5:
                 hue_value = random.uniform(-0.5, 0.5)
                 img = adjust_hue(img, hue_value)
-                masked_img = adjust_hue(masked_img, hue_value)
                 c_raw = adjust_hue(c_raw, hue_value)
+                c = adjust_hue(c, hue_value)
             if random.random() > 0.5:
                 contrast_factor = random.uniform(0.8, 1.2)
                 img = adjust_contrast(img, contrast_factor)
-                masked_img = adjust_contrast(masked_img, contrast_factor)
                 c_raw = adjust_contrast(c_raw, contrast_factor)
-            if random.random() > 0.5:
-                shift_x = random.uniform(-0.2, 0.2)
-                shift_y = random.uniform(-0.2, 0.2)
-                img = affine(img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
-                masked_img = affine(masked_img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
-                mask = affine(mask, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
-                dp = affine(dp, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
-            if random.random() > 0.5:
-                scale = random.uniform(0.8, 1.2)
-                img = affine(img, angle=0, translate=(0, 0), scale=scale, shear=0)
-                masked_img = affine(masked_img, angle=0, translate=(0, 0), scale=scale, shear=0)
-                mask = affine(mask, angle=0, translate=(0, 0), scale=scale, shear=0)
-                dp = affine(dp, angle=0, translate=(0, 0), scale=scale, shear=0)
+                c = adjust_contrast(c, contrast_factor)
+            # if random.random() > 0.5:
+            #     shift_x = random.uniform(-0.2, 0.2)
+            #     shift_y = random.uniform(-0.2, 0.2)
+            #     img = affine(img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            #     masked_img = affine(masked_img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            #     mask = affine(mask, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            #     dp = affine(dp, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            # if random.random() > 0.5:
+            #     scale = random.uniform(0.8, 1.2)
+            #     img = affine(img, angle=0, translate=(0, 0), scale=scale, shear=0)
+            #     masked_img = affine(masked_img, angle=0, translate=(0, 0), scale=scale, shear=0)
+            #     mask = affine(mask, angle=0, translate=(0, 0), scale=scale, shear=0)
+            #     dp = affine(dp, angle=0, translate=(0, 0), scale=scale, shear=0)
+
+        masked_img = torch.mul(1 - mask, img)
+
+        drop_image_embed = 1 if random.random() < 0.1 else 0 # drop rate 10%
 
         item.update({
             'im_name': img_name,
@@ -176,13 +180,14 @@ class VITONHDDataset(Dataset):
             'mask': mask,
             'densepose': dp,
             'cloth_raw': c_raw,
+            'cloth_ref': c,
+            'drop_image_embed': drop_image_embed
             # 'original_image_path': str(self.im_paths[index]),
             # 'original_mask': self.totensor(origin_m),
             # 'original_mask_path': str(self.m_paths[index]),
             # 'original_masked_image': self.totensor(origin_agn),
             # 'original_densepose': self.totensor(origin_dp),
             # 'original_cloth_path': str(self.c_paths[index]),
-            # 'cloth': c,
         })
 
         return item

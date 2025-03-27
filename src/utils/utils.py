@@ -233,12 +233,13 @@ def random_dilate_mask(mask: PIL.Image.Image) -> PIL.Image.Image:
         hull = cv.convexHull(contours[0])
         hull = np.squeeze(hull)
 
-        delta_x = random.uniform(0.001, 0.1)
-        delta_y = random.uniform(0.001, 0.3)
+        delta_x_left = random.uniform(0.01, 0.05)
+        delta_x_right = random.uniform(0.01, 0.05)
+        delta_y = random.uniform(0.2, 0.3)
         mask_width = hull[0][0] - hull[3][0]
         mask_height = hull[1][1] - hull[0][1]
-        new_x_left = int(hull[3][0] - delta_x * mask_width)
-        new_x_right = int(hull[0][0] + delta_x * mask_width)
+        new_x_left = int(hull[3][0] - delta_x_left * mask_width)
+        new_x_right = int(hull[0][0] + delta_x_right * mask_width)
         new_y = int(hull[1][1] + delta_y * mask_height)
 
         new_x_left = max(0, new_x_left)

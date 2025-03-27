@@ -26,6 +26,8 @@ class DressCodeDataset(Dataset):
             use_augmentation: bool = False,
             h: int = 1024, # height
             w: int = 768, # weight
+            use_CLIPVision: bool = True,
+            clip_model_id: str = 'openai/clip-vit-base-patch32', # huggingface model id
             use_dilated_relaxed_mask: bool = False,
             random_dilate_mask: bool = False
     ):
@@ -36,10 +38,14 @@ class DressCodeDataset(Dataset):
         self.w = self.width = w
         self.use_dilated_relaxed_mask = use_dilated_relaxed_mask
         self.random_dilate_mask = random_dilate_mask
+        self.use_CLIPVision = use_CLIPVision
 
         if self.use_augmentation:
             # flip
             self.flip = v2.RandomHorizontalFlip(p=1)
+        
+        if self.use_CLIPVision:
+            self.image_processor = CLIPImageProcessor(clip_model_id)
 
         self.totensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
         self.transform = v2.Compose(
@@ -112,7 +118,8 @@ class DressCodeDataset(Dataset):
 
         # garment image
         c_raw = Image.open(osp.join(dataroot, 'images', c_name))
-        c_raw = c_raw.resize((self.w, self.h))
+        c = c_raw = c_raw.resize((self.w, self.h))
+        c = self.image_processor(images=c, return_tensors='pt').pixel_values
         c_raw = self.transform(c_raw)
 
         # mask image
@@ -124,8 +131,11 @@ class DressCodeDataset(Dataset):
         mask_np[mask_np > 127] = 255
         mask_np[mask_np <= 127] = 0
         mask = Image.fromarray(mask_np)
-        
-        mask = random_dilate_mask(mask) if self.random_dilate_mask else mask
+
+        if self.random_dilate_mask:
+            if random.random() > 0.5:
+                mask = random_dilate_mask(mask)
+
         mask = mask.convert('L')
         mask = mask.point(lambda i: 255 if i > 127 else 0)
         mask = mask.convert('1') # [True, False] array
@@ -134,8 +144,8 @@ class DressCodeDataset(Dataset):
         mask = torch.from_numpy(mask)
 
         # agnostic image (masked image)
-        masked_img = mask2agn(mask, clone_img)
-        masked_img = self.transform(masked_img)
+        # masked_img = mask2agn(mask, clone_img)
+        # masked_img = self.transform(masked_img)
 
         # skeleton image
         skl = Image.open(osp.join(dataroot, 'skeleton_modified', im_name))
@@ -151,32 +161,36 @@ class DressCodeDataset(Dataset):
             if random.random() > 0.5:
                 img = self.flip(img)
                 c_raw = self.flip(c_raw)
+                c = self.flip(c)
                 mask = self.flip(mask)
-                masked_img = self.flip(masked_img)
                 dp = self.flip(dp)
             if random.random() > 0.5:
                 hue_value = random.uniform(-0.5, 0.5)
                 img = adjust_hue(img, hue_value)
-                masked_img = adjust_hue(masked_img, hue_value)
                 c_raw = adjust_hue(c_raw, hue_value)
+                c = adjust_hue(c, hue_value)
             if random.random() > 0.5:
                 contrast_factor = random.uniform(0.8, 1.2)
                 img = adjust_contrast(img, contrast_factor)
-                masked_img = adjust_contrast(masked_img, contrast_factor)
                 c_raw = adjust_contrast(c_raw, contrast_factor)
-            if random.random() > 0.5:
-                shift_x = random.uniform(-0.2, 0.2)
-                shift_y = random.uniform(-0.2, 0.2)
-                img = affine(img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
-                masked_img = affine(masked_img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
-                mask = affine(mask, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
-                dp = affine(dp, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
-            if random.random() > 0.5:
-                scale = random.uniform(0.8, 1.2)
-                img = affine(img, angle=0, translate=(0, 0), scale=scale, shear=0)
-                masked_img = affine(masked_img, angle=0, translate=(0, 0), scale=scale, shear=0)
-                mask = affine(mask, angle=0, translate=(0, 0), scale=scale, shear=0)
-                dp = affine(dp, angle=0, translate=(0, 0), scale=scale, shear=0)
+                c = adjust_contrast(c, contrast_factor)
+            # if random.random() > 0.5:
+            #     shift_x = random.uniform(-0.2, 0.2)
+            #     shift_y = random.uniform(-0.2, 0.2)
+            #     img = affine(img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            #     masked_img = affine(masked_img, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            #     mask = affine(mask, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            #     dp = affine(dp, angle=0, translate=(shift_x * self.width, shift_y * self.height), scale=1, shear=0)
+            # if random.random() > 0.5:
+            #     scale = random.uniform(0.8, 1.2)
+            #     img = affine(img, angle=0, translate=(0, 0), scale=scale, shear=0)
+            #     # masked_img = affine(masked_img, angle=0, translate=(0, 0), scale=scale, shear=0)
+            #     mask = affine(mask, angle=0, translate=(0, 0), scale=scale, shear=0)
+            #     dp = affine(dp, angle=0, translate=(0, 0), scale=scale, shear=0)
+        
+        masked_img = torch.mul(1 - mask, img)
+        
+        drop_image_embed = 1 if random.random() < 0.1 else 0
 
         item.update({
             'im_name': im_name,
@@ -187,6 +201,8 @@ class DressCodeDataset(Dataset):
             'mask': mask,
             'densepose': dp,
             'cloth_raw': c_raw,
+            'cloth_ref': c,
+            'drop_image_embed': drop_image_embed
         })
 
         return item
