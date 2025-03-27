@@ -476,6 +476,7 @@ def main():
     # init_attn_processor(refnet, cross_attn_cls=SkipAttnProcessor)
     from xformers.ops import MemoryEfficientAttentionFlashAttentionOp
     unet.enable_xformers_memory_efficient_attention(attention_op=MemoryEfficientAttentionFlashAttentionOp)
+    refnet.enable_xformers_memory_efficient_attention(attention_op=MemoryEfficientAttentionFlashAttentionOp)
 
     if unet.conv_in.in_channels == 4:
         raise RuntimeError('This script supports inpainting UNet only.')

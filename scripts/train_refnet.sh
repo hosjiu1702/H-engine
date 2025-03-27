@@ -11,14 +11,14 @@ export VITONHD_DATAPATH=datasets/vitonhd
 export DRESSCODE_DATAPATH=datasets/dresscode
 export OUTPUT_DIR=results/refnet_2503_dc
 export PROJECT_NAME='TEST-VTO'
-export WANDB_NAME_RUN='fusion_block=full__self_attn=midup'
+export WANDB_NAME_RUN='no_train_refnet'
 export CFG=1.5
 export SNR_GAMMA=5
 export WIDTH=384
 export HEIGHT=512
-export TRAIN_BATCH_SIZE=8
+export TRAIN_BATCH_SIZE=16
 export TEST_BATCH_SIZE=8
-export SEED=2114
+export SEED=2117
 export ENABLE_TRACKER=true
 
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -u -m accelerate.commands.launch --main_process_port=$MAIN_PROCESS_PORT --mixed_precision=$MIXED_PRECISION_TRAINING --num_processes=$NUM_GPUS --num_machines=$NUM_NODES --dynamo_backend='no' \
